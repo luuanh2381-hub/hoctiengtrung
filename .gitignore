@@ -1,0 +1,21 @@
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+credentials.json
+service-account*.json
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
