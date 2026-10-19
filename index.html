@@ -105,38 +105,47 @@
 
 <div id="app-header">
 <div id="topbar">
-  <h1>🀄 學中文</h1>
-  <span id="streak-badge">🔥 0 ngày</span>
+  <h1>🀄<span class="brand-text"> 學中文</span></h1>
+  <span id="streak-badge" title="Số ngày học liên tiếp">🔥 0</span>
   <span id="study-timer-chip" style="display:none;background:var(--active-c,#e0e7ff);padding:3px 9px;border-radius:16px;font-size:.7rem;font-weight:800;color:var(--active-dark,#3730a3);"></span>
   <button id="user-badge" onclick="authOpenMenu()">👤 Khách</button>
-  <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn" title="Chế độ tối/sáng">🌙</button>
-  <div class="speed-control">
-    <label>🐢</label>
-    <input type="range" id="speed-slider" min="0.3" max="1.0" step="0.05" value="0.65" oninput="updateSpeed(this.value)">
-    <span class="speed-val" id="speed-val">0.65</span>
+  <button id="display-btn" class="display-btn" onclick="navToggleDisplay()" aria-label="Hiển thị" aria-expanded="false" title="Hiển thị">⚙️<i id="display-dot"></i></button>
+</div>
+<!-- V116: các nút giao diện gom vào 1 bảng (giữ nguyên id để code cũ cập nhật nhãn như trước) -->
+<div id="display-panel" style="display:none;">
+  <div class="dp-row">
+    <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn" title="Chế độ tối/sáng">🌙</button>
+    <div class="speed-control">
+      <label>🐢 Tốc độ đọc</label>
+      <input type="range" id="speed-slider" min="0.3" max="1.0" step="0.05" value="0.65" oninput="updateSpeed(this.value)">
+      <span class="speed-val" id="speed-val">0.65</span>
+    </div>
   </div>
-  <button class="pinyin-toggle" onclick="togglePinyin()" id="py-toggle-btn">Ẩn Pinyin</button>
-  <button class="pinyin-toggle" onclick="toggleMeaning()" id="vi-toggle-btn">Ẩn nghĩa</button>
-  <button class="pinyin-toggle" onclick="toggleHanViet()" id="hv-toggle-btn">Ẩn Hán Việt</button>
+  <div class="dp-row">
+    <button class="pinyin-toggle" onclick="togglePinyin()" id="py-toggle-btn">Ẩn Pinyin</button>
+    <button class="pinyin-toggle" onclick="toggleMeaning()" id="vi-toggle-btn">Ẩn nghĩa</button>
+    <button class="pinyin-toggle" onclick="toggleHanViet()" id="hv-toggle-btn">Ẩn Hán Việt</button>
+  </div>
+</div>
 </div>
 
-<div id="nav">
-  <button onclick="goTab('home')" class="active" id="tab-home">🏠 Trang chủ</button>
-  <button onclick="goTab('today')" id="tab-today">🎯 Hôm nay học</button>
-  <button onclick="goTab('flash')" id="tab-flash">📖 Flashcard</button>
-  <button onclick="goTab('quiz')" id="tab-quiz">📝 Trắc nghiệm</button>
-  <button onclick="goTab('type')" id="tab-type">⌨️ Gõ chữ</button>
-  <button onclick="goTab('listen')" id="tab-listen">🎧 Nghe – Chọn</button>
-  <button onclick="goTab('stats')" id="tab-stats">📊 Thống kê</button>
-  <button onclick="goTab('skills')" id="tab-skills">📈 Phân tích năng lực</button>
-  <button onclick="goTab('difficult')" id="tab-difficult">😓 Từ khó</button>
+<div id="subnav" style="display:none;"></div>
+
+<div id="content"></div>
+
+<!-- V116: bảng "Thêm" (mở từ nút ⋯ ở thanh dưới). id tab-admin / tab-vocab giữ nguyên để auth.js bật/tắt theo quyền. -->
+<div id="more-sheet" style="display:none;">
   <button onclick="goTab('compare')" id="tab-compare">🆚 So sánh</button>
   <button onclick="goTab('admin')" id="tab-admin" style="display:none;">🛠️ Quản trị</button>
   <button onclick="goTab('vocab')" id="tab-vocab" style="display:none;">📚 Từ vựng</button>
 </div>
-</div>
 
-<div id="content"></div>
+<div id="nav" role="navigation" aria-label="Điều hướng chính">
+  <button onclick="goTab('home')" class="active" id="tab-home"><span class="nav-ic">🏠</span><span class="nav-lb">Trang chủ</span></button>
+  <button onclick="goTab('today')" id="tab-today"><span class="nav-ic">🎯</span><span class="nav-lb">Học</span></button>
+  <button onclick="navGoProgress()" id="tab-progress"><span class="nav-ic">📊</span><span class="nav-lb">Tiến bộ</span></button>
+  <button onclick="navToggleMore()" id="tab-more" aria-expanded="false"><span class="nav-ic">⋯</span><span class="nav-lb">Thêm</span></button>
+</div>
 
 <script src="/js/theme.js"></script>
 <script src="/js/data.js"></script>
@@ -147,6 +156,7 @@
 <script src="/js/timer.js"></script>
 <script src="/js/audio.js"></script>
 <script src="/js/ui.js"></script>
+<script src="/js/nav.js"></script>
 <script src="/js/navigation.js"></script>
 <script src="/js/lesson.js"></script>
 <script src="/js/visibility-timer.js"></script>
@@ -163,7 +173,6 @@
 <script src="/js/stats.js"></script>
 <script src="/js/skills-ui.js"></script>
 <script src="/js/skills-analysis.js"></script>
-<script src="/js/word-notes.js"></script>
 <script src="/js/stroke.js"></script>
 <script src="/js/fsrs-optimizer.js"></script>
 <script src="/js/compare.js"></script>
