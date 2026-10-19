@@ -92,6 +92,13 @@ function swSync() {
   swUpdateBar();
 }
 
+// Nút điều khiển thu gọn đặt TRONG hàng đầu của khung học (chỉ hiện ở chế độ Tập trung / Tối đa — CSS quyết định).
+function swHeadActionsHtml() {
+  return `<button type="button" class="sw-ib" onclick="swPause()" title="Tạm dừng" aria-label="Tạm dừng">⏸</button>`
+    + `<button type="button" class="sw-ib" onclick="swTogglePanel()" title="Cài đặt khu vực học" aria-label="Cài đặt khu vực học">⚙️</button>`
+    + `<button type="button" class="sw-ib" onclick="swSetLayout('standard')" title="Thoát chế độ này (Esc)" aria-label="Thoát chế độ này">✕</button>`;
+}
+
 function swSessionRunning() {
   return typeof rvQueue !== 'undefined' && rvQueue.items.length > 0 && rvStage === 'run';
 }
@@ -135,6 +142,7 @@ function swSetLayout(l) {
   if (!SW_LAYOUTS.includes(l)) return;
   swPrefs.layout = l; swSavePrefs();
   swApply(); swUpdateBar();
+  swRenderPanel();
   if (l === 'standard' && typeof window !== 'undefined') window.scrollTo(0, 0);
   const typed = document.getElementById('rv-typed');
   if (typed && document.activeElement === typed) { try { typed.scrollIntoView({ block: 'center' }); } catch {} }
@@ -192,6 +200,8 @@ function swRenderPanel() {
   const sp = (typeof showPinyin !== 'undefined') ? showPinyin : true, sm = (typeof showMeaning !== 'undefined') ? showMeaning : true, sh = (typeof showHanViet !== 'undefined') ? showHanViet : true;
   pn.innerHTML = `
     <div class="sw-panel-head"><b>Cài đặt khu vực học</b><button type="button" class="sw-x" onclick="swClosePanel()" aria-label="Đóng">✕</button></div>
+    <div class="sw-row"><span class="sw-row-l">Chế độ giao diện</span><span class="sw-mini">${[['standard', '▭ Chuẩn'], ['focus', '◎ Tập trung'], ['max-space', '⤢ Tối đa']].map(([v, t]) =>
+      `<button type="button" class="${v === swPrefs.layout ? 'active' : ''}" onclick="swSetLayout('${v}');swRenderPanel()">${t}</button>`).join('')}</span></div>
     <div class="sw-row"><span class="sw-row-l">Cỡ chữ Hán</span><input type="range" min="0.7" max="1.8" step="0.1" value="${swPrefs.hz}" oninput="swSetPref('hz', this.value)" aria-label="Cỡ chữ Hán"></div>
     <div class="sw-row"><span class="sw-row-l">Cỡ đáp án</span><input type="range" min="0.85" max="1.6" step="0.05" value="${swPrefs.opt}" oninput="swSetPref('opt', this.value)" aria-label="Cỡ đáp án"></div>
     ${swSegRow('Khoảng cách đáp án', 'gap', [['tight', 'Gọn'], ['normal', 'Vừa'], ['loose', 'Rộng']], swPrefs.gap)}

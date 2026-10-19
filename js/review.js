@@ -1031,14 +1031,20 @@ function renderReview() {
   const newLeft = rvQueue.items.filter(it => it.type === 'new' || (it.type === 'check' && it.origType === 'new')).length;
   const revLeft = rvQueue.items.filter(it => it.type === 'review').length;
   const newDone = Math.max(0, newTotal - newLeft), revDone = Math.max(0, revTotal - revLeft);
+  // Mỗi mục = icon + chữ (.rv-ct-t). Khi hàng hẹp, CSS (container query) ẩn chữ, chỉ còn icon + số.
+  const ct = (icon, text, val) => `<span class="rv-ct">${icon}${text ? `<span class="rv-ct-t"> ${text}</span>` : ''}${val != null ? ` <b>${val}</b>` : ''}</span>`;
   const parts = [];
-  if (newTotal > 0) parts.push(`🆕 Từ mới <b>${Math.min(newDone, newTotal)}/${newTotal}</b>`);
-  if (revTotal > 0) parts.push(`🔁 Ôn <b>${Math.min(revDone, revTotal)}/${revTotal}</b>`);
-  let counter = parts.length ? parts.join(' · ') : `Câu ${rvQueue.answeredCount + 1} · còn ${official} thẻ`;
-  if (rvPhase === 'intro') counter += ' · xem kỹ từ mới';
-  else if (practice || rvPhase === 'match') counter += ' · luyện bổ sung · không tính vào lịch ôn';
+  if (newTotal > 0) parts.push(ct('🆕', 'Từ mới', `${Math.min(newDone, newTotal)}/${newTotal}`));
+  if (revTotal > 0) parts.push(ct('🔁', 'Ôn', `${Math.min(revDone, revTotal)}/${revTotal}`));
+  if (!parts.length) parts.push(ct('📋', `Câu ${rvQueue.answeredCount + 1} · còn ${official} thẻ`, null));
+  const cur = rvQueue.items[0];
+  if (cur && cur.word && cur.word.l != null) parts.push(ct('📖', 'Bài', escapeHtml(String(cur.word.l)))); // V117: bài của từ đang học
+  if (rvPhase === 'intro') parts.push(ct('👀', 'xem kỹ từ mới', null));
+  else if (practice || rvPhase === 'match') parts.push(ct('📝', 'luyện bổ sung · không tính vào lịch ôn', null));
+  const counter = parts.join('');
+  const headAct = (typeof swHeadActionsHtml === 'function') ? swHeadActionsHtml() : '';
   return `
-    <div class="rv-card" data-phase="${rvPhase}" data-q="${rvPhase === 'match' ? 'match' : (rvQuestion ? rvQuestion.typeId : '')}" data-kind="${(rvPhase === 'question' && rvQuestion && rvQuestion.prompt) ? rvQuestion.prompt.kind : ''}"><div class="rv-counter rv-counter-line" role="status" aria-live="polite">${counter}</div><div class="rv-body">${body}</div></div>
+    <div class="rv-card" data-phase="${rvPhase}" data-q="${rvPhase === 'match' ? 'match' : (rvQuestion ? rvQuestion.typeId : '')}" data-kind="${(rvPhase === 'question' && rvQuestion && rvQuestion.prompt) ? rvQuestion.prompt.kind : ''}"><div class="rv-head"><div class="rv-counter rv-counter-line" role="status" aria-live="polite">${counter}</div><div class="rv-head-act">${headAct}</div></div><div class="rv-body">${body}</div></div>
   `;
 }
 
