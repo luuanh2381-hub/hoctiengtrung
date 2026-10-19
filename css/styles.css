@@ -549,3 +549,104 @@
   @media (min-width:900px){
     #content{max-width:780px;}
   }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   V117 — STUDY WORKSPACE (màn "Hôm nay học").
+   MỌI quy tắc dưới đây bắt đầu bằng `body.sw-on` — class này CHỈ được đặt khi đang ở tab 'review'
+   (js/study-workspace.js: swSync) → không ảnh hưởng bất kỳ trang nào khác.
+   KHÔNG dùng Fullscreen API / đổi cỡ cửa sổ / zoom: chỉ ẩn bớt phần giao diện của chính website và co giãn vùng nội dung.
+   Không đặt chiều cao cố định cho vùng câu hỏi (chỉ min-height) để nội dung dài/chữ to/bàn phím ảo không bị cắt.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+body.sw-on{--sw-hz:1;--sw-opt:1;--sw-gap:12px}
+
+/* Thanh điều khiển (phân đoạn 3 chế độ + tạm dừng + cài đặt + thoát) */
+.sw-bar{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;max-width:720px;margin:0 auto;padding:6px 12px 0}
+.sw-seg{display:inline-flex;background:var(--paper);border:1.5px solid var(--border);border-radius:14px;overflow:hidden}
+.sw-seg button,.sw-btn{font:inherit;font-size:.74rem;font-weight:800;color:var(--muted);background:transparent;border:0;padding:7px 10px;min-height:36px;cursor:pointer;white-space:nowrap}
+.sw-seg button.active{background:var(--active);color:var(--ink)}
+.sw-actions{display:inline-flex;gap:6px}
+.sw-btn{background:var(--paper);border:1.5px solid var(--border);border-radius:14px}
+.sw-btn[aria-expanded="true"]{border-color:var(--active)}
+.sw-exit{color:var(--ink)}
+@media (max-width:480px){.sw-bar{flex-wrap:nowrap}.sw-seg button span,.sw-btn span{display:none}.sw-seg button,.sw-btn{padding:7px 11px;font-size:.95rem}}
+
+/* Bảng cài đặt */
+.sw-panel{max-width:720px;margin:6px auto 0;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-md);padding:10px 14px;max-height:min(70vh,calc(var(--sw-vh,100dvh) - 110px));overflow-y:auto;position:relative;z-index:50}
+.sw-panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:.9rem}
+.sw-x{border:0;background:transparent;font-size:1.1rem;cursor:pointer;color:var(--muted);min-width:36px;min-height:36px}
+.sw-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:.85rem}
+.sw-row-l{display:flex;flex-direction:column;font-weight:700;flex:1;min-width:0}
+.sw-row-l small{font-weight:600;font-size:.7rem;color:var(--muted);line-height:1.35;margin-top:2px}
+.sw-row input[type=range]{width:46%;accent-color:var(--active)}
+.sw-row input[type=checkbox]{width:22px;height:22px;accent-color:var(--active);flex:none}
+.sw-mini{display:inline-flex;border:1.5px solid var(--border);border-radius:12px;overflow:hidden}
+.sw-mini button{font:inherit;font-size:.75rem;font-weight:800;border:0;background:var(--paper);color:var(--muted);padding:6px 10px;min-height:34px;cursor:pointer}
+.sw-mini button.active{background:var(--active);color:var(--ink)}
+.sw-sep{height:6px}
+.sw-reset{margin-top:10px;width:100%;min-height:42px;border:1.5px solid var(--border);border-radius:12px;background:var(--paper);color:var(--ink);font:inherit;font-weight:800;cursor:pointer}
+
+/* Tạm dừng: che kín câu hỏi */
+.sw-pause{position:fixed;inset:0;z-index:900;background:var(--paper);display:flex;align-items:center;justify-content:center;padding:20px}
+.sw-pause-box{max-width:360px;width:100%;text-align:center;display:flex;flex-direction:column;gap:10px}
+.sw-pause-ic{font-size:2.6rem}.sw-pause-t{font-size:1.3rem;font-weight:900}.sw-pause-s{font-size:.82rem;color:var(--muted);line-height:1.5;margin-bottom:6px}
+
+/* Chế độ Tập trung/Tối đa: ẩn nút Zalo nổi để không che đáp án (hiện lại khi thoát chế độ) */
+body.sw-on[data-sw-layout="focus"] #zalo-widget,body.sw-on[data-sw-layout="max-space"] #zalo-widget{display:none !important}
+
+/* Cỡ chữ Hán / đáp án / khoảng cách (áp cho cả chế độ Tiêu chuẩn) */
+body.sw-on .rv-hz{font-size:calc(min(4rem,18vw) * var(--sw-hz));overflow-wrap:anywhere;max-width:100%;line-height:1.15}
+body.sw-on .rv-hz.rv-hz-long{font-size:calc(min(2.8rem,12vw) * var(--sw-hz))}
+body.sw-on .rv-pyq{font-size:calc(2.2rem * var(--sw-hz))}
+body.sw-on .rv-cloze{font-size:calc(1.5rem * var(--sw-hz))}
+body.sw-on .quiz-opts{gap:var(--sw-gap)}
+body.sw-on .quiz-opt{font-size:calc(1rem * var(--sw-opt));min-height:calc(52px * var(--sw-opt));padding:calc(14px * var(--sw-opt)) 10px;overflow-wrap:anywhere}
+body.sw-on .rv-card .listen-play{width:calc(88px * var(--sw-opt));height:calc(88px * var(--sw-opt));font-size:calc(2.3rem * var(--sw-opt));padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--paper);border:2px solid var(--border)}
+body.sw-on .rv-card[data-kind="audio"] .listen-play:active{transform:scale(.96)}
+/* Ô nhập đủ lớn; font-size ≥ 16px để iOS không tự phóng to khi chạm vào ô */
+body.sw-on .rv-card .type-input{font-size:max(1.35rem,16px);min-height:58px}
+
+/* Ghép cặp: 2 cột khi đủ chỗ, 1 cột khi màn rất hẹp; cặp vừa ghép sai nhấp nháy đỏ */
+body.sw-on .rv-match{gap:var(--sw-gap);width:100%}
+body.sw-on .rv-match-btn{min-height:calc(52px * var(--sw-opt));font-size:calc(1rem * var(--sw-opt))}
+.rv-match-btn.bad{border-color:var(--wrong,#e74c3c);background:rgba(231,76,60,.12);animation:swShake .3s}
+@keyframes swShake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+@media (max-width:339px){.rv-match{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.rv-match-btn.bad{animation:none}}
+
+/* ── Chế độ TẬP TRUNG và KHÔNG GIAN TỐI ĐA: ẩn điều hướng của website, giữ thanh điều khiển + tiến độ ── */
+body.sw-on[data-sw-layout="focus"] #app-header,body.sw-on[data-sw-layout="max-space"] #app-header,
+body.sw-on[data-sw-layout="focus"] #subnav,body.sw-on[data-sw-layout="max-space"] #subnav,
+body.sw-on[data-sw-layout="focus"] #nav,body.sw-on[data-sw-layout="max-space"] #nav,
+body.sw-on[data-sw-layout="focus"] #more-sheet,body.sw-on[data-sw-layout="max-space"] #more-sheet{display:none !important}
+body.sw-on[data-sw-layout="focus"] .sw-bar,body.sw-on[data-sw-layout="max-space"] .sw-bar{position:sticky;top:0;z-index:100;background:var(--paper);padding:max(6px,env(safe-area-inset-top)) 12px 6px}
+body.sw-on[data-sw-layout="focus"] .rv-tag,body.sw-on[data-sw-layout="max-space"] .rv-tag,
+body.sw-on[data-sw-layout="focus"] .rv-why,body.sw-on[data-sw-layout="max-space"] .rv-why{display:none}
+
+body.sw-on[data-sw-layout="focus"] #content{max-width:860px;padding:8px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+body.sw-on[data-sw-layout="focus"] .rv-card{min-height:calc(var(--sw-vh,100dvh) - 150px)}
+body.sw-on[data-sw-layout="focus"] .rv-hz{font-size:calc(min(5rem,22vw) * var(--sw-hz))}
+body.sw-on[data-sw-layout="focus"] .rv-hz.rv-hz-long{font-size:calc(min(3.4rem,14vw) * var(--sw-hz))}
+
+body.sw-on[data-sw-layout="max-space"] #content{max-width:min(1180px,100%);padding:4px 10px calc(10px + env(safe-area-inset-bottom,0px))}
+body.sw-on[data-sw-layout="max-space"] .sw-bar{max-width:min(1180px,100%)}
+body.sw-on[data-sw-layout="max-space"] .rv-card{min-height:calc(var(--sw-vh,100dvh) - 112px);padding:16px 14px;border-radius:14px}
+body.sw-on[data-sw-layout="max-space"] .rv-hz{font-size:calc(min(6rem,24vw) * var(--sw-hz))}
+body.sw-on[data-sw-layout="max-space"] .rv-hz.rv-hz-long{font-size:calc(min(4rem,16vw) * var(--sw-hz))}
+body.sw-on[data-sw-layout="max-space"] .rv-progress-wrap{margin-bottom:8px}
+body.sw-on[data-sw-layout="max-space"] .rv-counter{margin-bottom:6px}
+/* Không kéo giãn quá mức: khối câu hỏi/đáp án giới hạn bề rộng đọc được, căn giữa */
+body.sw-on[data-sw-layout="focus"] .rv-card>*,body.sw-on[data-sw-layout="max-space"] .rv-card>*{max-width:min(100%,980px)}
+body.sw-on[data-sw-layout="focus"] .rv-card .quiz-opts,body.sw-on[data-sw-layout="max-space"] .rv-card .quiz-opts{width:100%}
+/* Màn rộng: đáp án tự chia cột theo bề rộng thật (không cố định chiều ngang) */
+@media (min-width:900px){
+  body.sw-on[data-sw-layout="max-space"] .rv-card .quiz-opts{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  body.sw-on[data-sw-layout="max-space"] .rv-match-btn{min-height:calc(60px * var(--sw-opt))}
+}
+/* Màn thấp (điện thoại nằm ngang, cửa sổ ngắn): không ép chiều cao, thu chữ lại để câu hỏi + đáp án vẫn vào một màn */
+@media (max-height:560px){
+  body.sw-on .rv-card{min-height:0 !important;padding:12px 12px;gap:6px}
+  body.sw-on .rv-hz,body.sw-on[data-sw-layout] .rv-hz{font-size:calc(min(2.6rem,14vh) * var(--sw-hz))}
+  body.sw-on .quiz-opt{min-height:44px;padding:8px}
+  body.sw-on .rv-card .listen-play{width:64px;height:64px;font-size:1.7rem}
+}
+@media (hover:none){body.sw-on .kbd-hint{display:none}}
