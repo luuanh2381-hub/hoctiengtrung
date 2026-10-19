@@ -653,3 +653,9 @@ body.sw-on[data-sw-layout="focus"] .rv-card .quiz-opts,body.sw-on[data-sw-layout
 
 .rv-counter-line{font-size:.82rem;margin:2px 0 8px}
 .rv-counter-line b{color:var(--ink)}
+/* V117: dòng tiến độ nằm TRONG khung học (khung chiếm trọn chiều cao vùng nội dung); nội dung câu hỏi vẫn căn giữa trong .rv-body */
+.rv-card:has(>.rv-body){justify-content:flex-start;gap:0;padding-top:12px}
+.rv-card>.rv-counter-line{align-self:stretch;margin:0 0 4px;text-align:center;flex:none}
+.rv-card>.rv-body{flex:1 1 auto;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-width:0}
+body.sw-on[data-sw-layout="focus"] .rv-card{min-height:calc(var(--sw-vh,100dvh) - 96px)}
+body.sw-on[data-sw-layout="max-space"] .rv-card{min-height:calc(var(--sw-vh,100dvh) - 72px)}
