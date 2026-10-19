@@ -1024,12 +1024,21 @@ function renderReview() {
       ${savedLine}
       ${(!isGuest && isAdminRole() && r && r.autoRating) ? `<div class="rv-saved-line">🐞 debug: auto rating = ${r.autoRating}</div>` : ''}`;
   }
-  const counter = rvPhase === 'intro' ? 'Học từ mới · xem kỹ rồi làm câu kiểm tra'
-    : (practice || rvPhase === 'match') ? 'Luyện bổ sung · không tính vào lịch ôn'
-    : `Câu ${rvQueue.answeredCount + 1} · còn ${official} thẻ trong hàng đợi`;
+  // V117: thay thanh tiến độ bằng 1 dòng chữ "Từ mới 2/70 · Ôn 20/30" để nhường chỗ cho vùng học.
+  // Đã xong = tổng dự kiến (rvSummary) − số thẻ chính thức CÒN trong hàng đợi (thẻ sai quay lại hàng đợi vẫn tính 1 lần;
+  // thẻ mới đang ở câu 'check' vẫn tính là còn). Không thêm dữ liệu lưu mới → phiên đã lưu từ V116 vẫn hiển thị đúng.
+  const newTotal = rvSummary.newCount || 0, revTotal = rvSummary.reviewCount || 0;
+  const newLeft = rvQueue.items.filter(it => it.type === 'new' || (it.type === 'check' && it.origType === 'new')).length;
+  const revLeft = rvQueue.items.filter(it => it.type === 'review').length;
+  const newDone = Math.max(0, newTotal - newLeft), revDone = Math.max(0, revTotal - revLeft);
+  const parts = [];
+  if (newTotal > 0) parts.push(`🆕 Từ mới <b>${Math.min(newDone, newTotal)}/${newTotal}</b>`);
+  if (revTotal > 0) parts.push(`🔁 Ôn <b>${Math.min(revDone, revTotal)}/${revTotal}</b>`);
+  let counter = parts.length ? parts.join(' · ') : `Câu ${rvQueue.answeredCount + 1} · còn ${official} thẻ`;
+  if (rvPhase === 'intro') counter += ' · xem kỹ từ mới';
+  else if (practice || rvPhase === 'match') counter += ' · luyện bổ sung · không tính vào lịch ôn';
   return `
-    <div class="rv-progress-wrap"><div class="rv-progress-fill" style="width:${pct}%;"></div></div>
-    <div class="rv-counter">${counter}</div>
+    <div class="rv-counter rv-counter-line" role="status" aria-live="polite">${counter}</div>
     <div class="rv-card" data-phase="${rvPhase}" data-q="${rvPhase === 'match' ? 'match' : (rvQuestion ? rvQuestion.typeId : '')}" data-kind="${(rvPhase === 'question' && rvQuestion && rvQuestion.prompt) ? rvQuestion.prompt.kind : ''}">${body}</div>
   `;
 }
