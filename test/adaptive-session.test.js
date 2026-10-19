@@ -62,16 +62,17 @@ function makeEnv(opts) {
   vm.runInContext(read('js/skill-score.js'), ctx); // V111: bộ chọn dùng SS để cập nhật hồ sơ sau mỗi câu
   vm.runInContext(read('js/question-engine.js'), ctx);
   vm.runInContext(read('js/question-selector.js'), ctx);
-  const consts = ['RV_NEW_GAP', 'RV_DRILL_GAP', 'RV_DRILL_MAX_TRIES', 'RV_EXTRA_MAX', 'RV_PRACTICE_TYPES', 'RV_CORRECTION_GAP'].map(constLine).join('\n'); // V115: rvAdvanceQueue dùng RV_CORRECTION_GAP
+  const consts = ['RV_AUTO_COMMIT_MS', 'RV_NEW_GAP', 'RV_DRILL_GAP', 'RV_DRILL_MAX_TRIES', 'RV_EXTRA_MAX', 'RV_PRACTICE_TYPES', 'RV_CORRECTION_GAP'].map(constLine).join('\n'); // V115: rvAdvanceQueue dùng RV_CORRECTION_GAP
   const fns = ['rvIsPractice', 'rvIsOfficial', 'rvIsIntroExposure', 'rvQCtx', 'rvSkillTypes', 'rvTypedEnabled', 'rvPracticeSource', // V110: rvBuildQuestionFor/rvPickPractice gọi 2 hàm này
-     'rvBuildQuestionFor', 'rvStageLabel', 'rvRecordAnswer', 'rvRestoreQSession',
+     'rvBuildQuestionFor', 'rvStageLabel', 'rvRecordAnswer', 'rvRestoreQSession', 'rvBaseAutoMs', // V117: rvPickPractice dùng rvBaseAutoMs
+   
     'rvPrepareCurrentCard', 'rvIntroDone', 'rvAdvanceQueue', 'rvFetchWeakWords', 'rvWordOf', 'rvAddExtras', 'rvInsertMatch', 'rvBuildStartInfo',
     'rvSummaryHtml', 'rvBeginPracticeOnly', 'rvStartRedoWrong', 'rvStartWeakPractice', 'rvPickPractice', 'rvMatchPick', 'rvMatchFinish', 'rvMatchContinue', 'rvPracticeContinue'].map(grab).join('\n');
   const prelude = `
     let rvQueue = sqCreate(), rvQuestion = null, rvQSession = QS.newSession(), rvLog = [], rvStage = 'run', rvStartInfo = null, rvMatch = null,
         rvPhase = 'question', rvLastAnswer = null, rvAnswerChanges = 0, rvRatingPhase = null, rvSystemRating = null, rvUserRating = null,
         rvFinalRating = null, rvPendingReview = null, rvStartedAt = 0, rvExamplePool = [], rvSummary = { reviewCount: 0, newCount: 0 },
-        rvWeakMode = false, rvBlockedByBacklog = false, rvTotalDue = 0, rvAttemptId = 0, rvSubmitting = false;
+        rvWeakMode = false, rvBlockedByBacklog = false, rvTotalDue = 0, rvAttemptId = 0, rvSubmitting = false, rvCardSeq = 0; // V117: rvCardSeq
     ${consts}
     ${fns}
     globalThis.__env = { get q() { return rvQueue; }, set q(v) { rvQueue = v; }, get log() { return rvLog; }, set log(v) { rvLog = v; },
