@@ -315,7 +315,7 @@ function kbdIsTypingTarget(el) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
 }
 function kbdAnyModalOpen() {
-  return ['auth-gate', 'account-menu', 'danger-confirm-modal', 'pw-modal', 'stroke-overlay', 'display-panel', 'more-sheet'].some(id => { // V116: thêm cửa sổ nét viết + 2 bảng của menu mới
+  return ['auth-gate', 'account-menu', 'danger-confirm-modal', 'pw-modal', 'stroke-overlay', 'display-panel', 'more-sheet', 'sw-panel', 'sw-pause'].some(id => { // V116: thêm cửa sổ nét viết + 2 bảng của menu mới
     const el = document.getElementById(id);
     return el && getComputedStyle(el).display !== 'none';
   });
@@ -345,6 +345,7 @@ document.addEventListener('keydown', (e) => {
     if (isDigit1to4) { e.preventDefault(); kbdPickOption('#ls-area .listen-opt', +key - 1); }
     else if (key.toLowerCase() === 'a') { e.preventDefault(); const b = document.getElementById('ls-play'); if (b) b.click(); }
   } else if (currentTab === 'review') {
+    if (typeof swIsPaused === 'function' && swIsPaused()) return; // V117: đang tạm dừng
     if (rvPhase === 'question' && isDigit1to4) { e.preventDefault(); kbdPickOption('#rv-opts .quiz-opt', +key - 1); }
     else if (rvPhase === 'answered' && (rvRatingPhase === 'pending' || rvRatingPhase === 'loading') && isDigit1to4) {
       e.preventDefault(); rvChooseRating(RV_RATING_ORDER[+key - 1]);

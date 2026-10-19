@@ -11,6 +11,7 @@ function render() {
   // V112: đồng bộ "vắng mặt" của câu hỏi đang treo (đổi tab trong app = vắng mặt) và giờ học THỰC (isStudyContext gồm cả buổi
   // luyện kỹ năng bổ sung). Rời màn học → báo nốt số giây học thực chưa gửi rồi dừng.
   vtSync();
+  if (typeof swSync === 'function') swSync(); // V117: bật/tắt class `sw-on` + thanh điều khiển khu vực học (chỉ ở tab 'review')
   if (isStudyContext()) ensureStudySession(); else leaveStudyContext();
   const el = document.getElementById('content');
   if (currentTab === 'home')   { el.innerHTML = renderHome(); bindHome(); }

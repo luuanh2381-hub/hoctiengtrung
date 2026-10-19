@@ -30,7 +30,8 @@ const QS = (function () {
   'use strict';
 
   const WEIGHTS = {
-    base: { hz2vi: 1.0, vi2hz: 1.0, listen2hz: 1.0, listen2vi: 1.0, hz2py: 0.9, cloze: 1.1, confusable: 0.8, listen2tone: 0.8, typeVi2hz: 0.9, typeHz2py: 0.9 },
+    base: { hz2vi: 1.0, vi2hz: 1.0, listen2hz: 1.0, listen2vi: 1.0, hz2py: 0.9, cloze: 1.1, confusable: 0.8, listen2tone: 0.8, typeVi2hz: 0.9, typeHz2py: 0.9,
+      py2hz: 0.95, py2vi: 0.95, vi2py: 0.95, hz2hv: 0.9, listen2type: 0.9 }, // V117: dạng bổ sung (chỉ luyện bổ sung)
     // V110 — câu TỰ NHẬP là "độ khó tăng dần": chỉ ưu tiên khi người học đã VỮNG kỹ năng đó ở dạng trắc nghiệm.
     typedMasteryBonus: 1.8, typedMinAttempts: 4,           // kỹ năng 'tốt' (≥0.75) và ≥ 4 lượt → cộng
     typedDevelopingPenalty: 0.6, typedNotReadyPenalty: 2.5, // đang phát triển → trừ nhẹ; yếu/thiếu dữ liệu → gần như không gõ
@@ -56,7 +57,7 @@ const QS = (function () {
     return { asked: {}, history: [], typeCount: {}, recentCorrectPositions: [], rt: {} };
   }
   const SK_NAME = { recognition: 'Nhận diện chữ Hán', recall: 'Nhớ chủ động', listening: 'Nghe', pinyin: 'Pinyin', context: 'Dùng từ trong câu' };
-  const EASY_TYPES = ['hz2vi', 'listen2vi'], HARD_TYPES = ['vi2hz', 'cloze', 'listen2hz'], SLOW_TYPES = ['cloze'];
+  const EASY_TYPES = ['hz2vi', 'listen2vi', 'py2vi'], HARD_TYPES = ['vi2hz', 'cloze', 'listen2hz', 'py2hz'], SLOW_TYPES = ['cloze'];
   function scoreLib() { return (typeof SS !== 'undefined') ? SS : require('./skill-score'); }
   const rtKey = (q) => q.skill + (q.typed ? ':t' : ':c');
   function median(a) { const b = a.slice().sort((x, y) => x - y); const m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; }
@@ -185,7 +186,7 @@ const QS = (function () {
     // 'confusable' (chỉ luyện bổ sung) chỉ được xét khi caller cho phép; từ không thuộc nhóm dễ nhầm sẽ không dựng được → tự bị bỏ qua.
     // V110: câu tự nhập (QE.TYPED_ORDER) chỉ được xét khi người gọi bật allowTyped (người học có thể tắt trong cài đặt).
     let types = (o.only && o.only.length ? o.only
-      : QE.MCQ_ORDER.concat(o.allowPracticeOnly ? ['confusable'] : [], o.allowTyped ? QE.TYPED_ORDER : [])).slice();
+      : QE.MCQ_ORDER.concat(o.allowPracticeOnly ? QE.PRACTICE_ORDER : [], o.allowTyped ? QE.TYPED_ORDER : [], (o.allowPracticeOnly && o.allowTyped) ? QE.PRACTICE_TYPED_ORDER : [])).slice();
     if (!o.allowTyped) types = types.filter(t => !(QE.TYPES[t] && QE.TYPES[t].typed));
     // V110 — CỔNG CỨNG cho câu tự gõ khi hệ thống TỰ chọn: chỉ khi kỹ năng đó đã 'đang phát triển' hoặc 'tốt' với đủ lượt
     // (trắc nghiệm trước, tự gõ sau). Không dựa vào điểm mềm: nếu trắc nghiệm không dựng được (kho từ quá ít), câu tự gõ

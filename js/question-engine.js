@@ -37,9 +37,19 @@ const QE = (function () {
     // "chỉ dùng pinyin có thật" của các dạng khác, và đó là chủ ý: bài này luyện đúng chỗ người học Việt hay lẫn — phân biệt thanh bằng tai).
     // Chỉ luyện bổ sung (không đi đường FSRS). Chấm bằng so khớp chuỗi với pinyin chuẩn của từ nên dùng chung quizType 'hz2py'.
     listen2tone: { id: 'listen2tone', label: 'Nghe → Chọn thanh điệu', skill: 'listening', quizType: 'hz2py', answerField: 'py', exerciseFsrs: null, exercisePractice: 'practice-listening-tone', practiceOnly: true, needsAudio: true },
+    // ── V117: dạng bài bổ sung — TẤT CẢ chỉ luyện bổ sung (practiceOnly: không đi đường FSRS, không đổi lịch ôn). ──────
+    // Chỉ dùng dữ liệu có thật của từ (py / vi / hanviet). Bộ dựng trả null khi dữ liệu không đủ để câu hỏi không mơ hồ.
+    py2hz:      { id: 'py2hz',      label: 'Pinyin → Chữ Hán',       skill: 'recall',      quizType: 'py2hz', answerField: 'hz', exerciseFsrs: null, exercisePractice: 'practice-py2hz',  practiceOnly: true },
+    py2vi:      { id: 'py2vi',      label: 'Pinyin → Nghĩa',         skill: 'recognition', quizType: 'hz2vi', answerField: 'vi', exerciseFsrs: null, exercisePractice: 'practice-py2vi',  practiceOnly: true },
+    vi2py:      { id: 'vi2py',      label: 'Nghĩa → Pinyin',         skill: 'pinyin',      quizType: 'hz2py', answerField: 'py', exerciseFsrs: null, exercisePractice: 'practice-vi2py',  practiceOnly: true },
+    hz2hv:      { id: 'hz2hv',      label: 'Chữ Hán → Hán Việt',     skill: 'recognition', quizType: 'hz2hv', answerField: 'hv', exerciseFsrs: null, exercisePractice: 'practice-hanviet', practiceOnly: true },
+    // Nghe → tự gõ chữ Hán: chỉ dựng khi KHÔNG có từ nào khác trong kho cùng cách đọc (đồng âm không phân biệt được bằng tai).
+    listen2type: { id: 'listen2type', label: 'Nghe → Gõ chữ Hán',    skill: 'listening',   quizType: 'vi2hz', answerField: 'hz', exerciseFsrs: null, exercisePractice: 'practice-listening-typed', practiceOnly: true, typed: 'hz', needsAudio: true },
     confusable: { id: 'confusable', label: 'Phân biệt chữ dễ nhầm',  skill: 'recall',      quizType: 'vi2hz', answerField: 'hz', exerciseFsrs: null,                exercisePractice: 'practice-confusable',   practiceOnly: true },
   };
   const MCQ_ORDER = ['hz2vi', 'vi2hz', 'listen2hz', 'listen2vi', 'hz2py', 'cloze']; // thứ tự ưu tiên khi hoà điểm
+  const PRACTICE_ORDER = ['confusable', 'py2hz', 'py2vi', 'vi2py', 'hz2hv'];       // V117: dạng chỉ luyện bổ sung (trắc nghiệm)
+  const PRACTICE_TYPED_ORDER = ['listen2type'];                                      // V117: dạng tự nhập chỉ luyện bổ sung
   const TYPED_ORDER = ['typeVi2hz', 'typeHz2py'];                                   // V110: chỉ được xét khi người gọi bật allowTyped
 
   // ── Chuẩn hoá ──────────────────────────────────────────────────────────────────────────────
@@ -116,6 +126,7 @@ const QE = (function () {
   function optionOf(field, w) {
     if (field === 'hz') return { key: w.hz, label: w.hz, sub: null };
     if (field === 'py') return { key: w.py, label: w.py, sub: null };
+    if (field === 'hv') return { key: w.hanviet, label: w.hanviet, sub: null };
     return { key: w.vi, label: w.vi, sub: null };
   }
 
@@ -133,6 +144,8 @@ const QE = (function () {
     }
     if (typeId === 'listen2hz' || typeId === 'listen2vi') return [`Bạn vừa nghe: ${base}`];
     if (typeId === 'listen2tone') return [`Bạn vừa nghe: ${base}`, `Thanh điệu của từ này: ${toneSequence(word.py).map(t => 'thanh ' + t).join(' + ')}.`];
+    if (typeId === 'hz2hv') return [base];
+    if (typeId === 'listen2type') return [`Bạn vừa nghe: ${base}`];
     if (typeId === 'hz2py' || typeId === 'typeHz2py') return [`${word.hz} đọc là ${word.py} (${word.vi}).`];
     return [base];
   }
@@ -230,6 +243,63 @@ const QE = (function () {
     return assemble('hz2py', word, ctx, { kind: 'text', main: word.hz, sub: null, ask: `${word.hz} đọc là gì?` }, ds);
   }
 
+
+  // ── V117: dạng bài bổ sung ─────────────────────────────────────────────────────────────────────────────────
+  // Từ có NHIỀU cách đọc (cháng / zhǎng) hoặc pinyin dạng số thanh → bỏ qua: không có đáp án pinyin duy nhất để chấm.
+  function singlePy(word) {
+    const py = String(word.py || '').normalize('NFC').trim();
+    return py && !/[\/,;，；、]/.test(py) ? py : null;
+  }
+  // Pinyin → chữ Hán. Nhiễu phải KHÁC cách đọc (đồng âm sẽ có ≥ 2 đáp án đúng theo đề). Nếu trong kho còn từ KHÁC
+  // cùng cách đọc thì đề (chỉ có pinyin) không xác định được duy nhất 1 chữ → không dựng.
+  function buildPy2Hz(word, ctx) {
+    const py = singlePy(word), k = pyKey(py);
+    if (!py || !k) return null;
+    if ((ctx.pool || []).some(x => x && x.hz && x.hz !== word.hz && pyKey(x.py) === k)) return null;
+    const ds = pickDistractors(word, ctx, 3, x => x.hz && pyKey(x.py) && pyKey(x.py) !== k, true);
+    return assemble('py2hz', word, ctx, { kind: 'text', main: py, sub: null, ask: 'Chữ Hán nào đọc là như vậy?' }, ds);
+  }
+  // Pinyin → nghĩa. Nhiễu: khác nghĩa VÀ khác cách đọc (từ đồng âm cũng khớp với pinyin của đề nên không được làm nhiễu).
+  function buildPy2Vi(word, ctx) {
+    const py = singlePy(word), k = pyKey(py);
+    if (!py || !k || !word.vi) return null;
+    if ((ctx.pool || []).some(x => x && x.hz && x.hz !== word.hz && pyKey(x.py) === k)) return null;
+    const ds = pickDistractors(word, ctx, 3, x => x.vi && pyKey(x.py) !== k && !meaningsOverlap(x.vi, word.vi) && normText(x.vi) !== normText(word.vi), true);
+    return assemble('py2vi', word, ctx, { kind: 'text', main: py, sub: null, ask: 'Từ có cách đọc này nghĩa là gì?' }, ds);
+  }
+  // Nghĩa → pinyin. Nhiễu: pinyin KHÁC, và không lấy từ từ cùng nghĩa (có thể cũng là đáp án chấp nhận được).
+  function buildVi2Py(word, ctx) {
+    const py = singlePy(word), k = pyKey(py);
+    if (!py || !k || !word.vi) return null;
+    const seen = new Set([k]);
+    const ds = pickDistractors(word, ctx, 3, x => {
+      const kk = pyKey(x.py);
+      if (!kk || seen.has(kk) || !x.vi || meaningsOverlap(x.vi, word.vi)) return false;
+      seen.add(kk); return true;
+    }, true);
+    return assemble('vi2py', word, ctx, { kind: 'text', main: word.vi, sub: null, ask: 'Từ này đọc là gì? (chọn pinyin)' }, ds);
+  }
+  // Chữ Hán → Hán Việt. Cần từ CÓ trường hanviet (không tự suy ra). Nhiễu: Hán Việt khác (không phân biệt hoa/thường).
+  function buildHz2Hv(word, ctx) {
+    const hv = String(word.hanviet || '').trim();
+    if (!hv) return null;
+    const base = normText(hv);
+    const seen = new Set([base]);
+    const ds = pickDistractors(word, ctx, 3, x => {
+      const n = normText(x.hanviet);
+      if (!n || seen.has(n)) return false;
+      seen.add(n); return true;
+    }, false);
+    return assemble('hz2hv', word, ctx, { kind: 'text', main: word.hz, sub: null, ask: `${word.hz} đọc theo âm Hán Việt là gì?` }, ds);
+  }
+  function buildListen2Type(word, ctx) {
+    if (!ctx.audioOk || !word.hz) return null;
+    const k = pyKey(word.py);
+    if (!k) return null;
+    if ((ctx.pool || []).some(x => x && x.hz && x.hz !== word.hz && pyKey(x.py) === k)) return null; // đồng âm → không chấm công bằng được
+    return assembleTyped('listen2type', word, { kind: 'audio', audioText: word.hz, ask: 'Nghe và gõ chữ Hán bạn nghe được' });
+  }
+
   // Câu ví dụ hợp lệ cho cloze: chứa từ ĐÚNG 1 lần (khoét 1 chỗ trống không mơ hồ), độ dài vừa phải.
   function findSentences(word, ctx) {
     const out = [];
@@ -302,13 +372,14 @@ const QE = (function () {
       typeId, hz: word.hz, l: word.l, word,
       skill: T.skill, quizType: T.quizType, typed: T.typed,
       exerciseFsrs: T.exerciseFsrs, exercisePractice: T.exercisePractice,
-      fsrsEligible: true,
+      fsrsEligible: !T.practiceOnly,
       prompt, options: [], correctIndex: -1, correctKey: correct.key,
       explanation: explain(typeId, word), tip: null, sentence: null,
     };
   }
 
-  const BUILDERS = { typeVi2hz: buildTypeVi2Hz, typeHz2py: buildTypeHz2Py, hz2vi: buildHz2Vi, vi2hz: buildVi2Hz, listen2hz: buildListen2Hz, listen2vi: buildListen2Vi, hz2py: buildHz2Py, cloze: buildCloze, confusable: buildConfusable, listen2tone: buildListen2Tone };
+  const BUILDERS = { typeVi2hz: buildTypeVi2Hz, typeHz2py: buildTypeHz2Py, hz2vi: buildHz2Vi, vi2hz: buildVi2Hz, listen2hz: buildListen2Hz, listen2vi: buildListen2Vi, hz2py: buildHz2Py, cloze: buildCloze, confusable: buildConfusable, listen2tone: buildListen2Tone,
+    py2hz: buildPy2Hz, py2vi: buildPy2Vi, vi2py: buildVi2Py, hz2hv: buildHz2Hv, listen2type: buildListen2Type };
 
   // ── Kiểm tra hợp lệ (dùng cả trong build và trong test) ────────────────────────────────────
   function validateTyped(q) {
@@ -320,6 +391,7 @@ const QE = (function () {
     const stem = JSON.stringify({ m: q.prompt.main, a: q.prompt.ask });
     if (q.typeId === 'typeVi2hz' && stem.includes(q.word.hz)) return { ok: false, reason: 'đề lộ chữ Hán' };
     if (q.typeId === 'typeHz2py' && q.word.py && stem.includes(q.word.py)) return { ok: false, reason: 'đề lộ pinyin' };
+    if (q.typeId === 'listen2type' && (stem.includes(q.word.hz) || (q.word.py && stem.includes(q.word.py)))) return { ok: false, reason: 'đề nghe lộ chữ Hán/Pinyin' };
     return { ok: true };
   }
   function validate(q, opts) {
@@ -337,7 +409,7 @@ const QE = (function () {
     if (!T) return { ok: false, reason: 'dạng bài lạ' };
     // Không nhiễu nào được "đúng theo dữ liệu".
     const wrong = q.options.filter((o, i) => i !== q.correctIndex);
-    if (T.answerField === 'vi' || (T.answerField === 'hz' && q.typeId !== 'listen2hz' && q.typeId !== 'cloze')) {
+    if (T.answerField === 'vi' || (T.answerField === 'hz' && q.typeId !== 'listen2hz' && q.typeId !== 'cloze' && q.typeId !== 'py2hz')) {
       // Đáp án là nghĩa, hoặc hỏi theo nghĩa → không được trùng nghĩa với từ gốc.
       for (const o of wrong) {
         const wv = T.answerField === 'vi' ? o.key : (opts && opts.viOf && opts.viOf(o.key));
@@ -345,7 +417,15 @@ const QE = (function () {
       }
     }
     if (q.typeId === 'listen2hz') for (const o of wrong) { if (opts && opts.pyOf && pyKey(opts.pyOf(o.key)) === pyKey(q.word.py)) return { ok: false, reason: 'nhiễu đồng âm' }; }
-    if (q.typeId === 'hz2py') for (const o of wrong) if (pyKey(o.key) === pyKey(q.word.py)) return { ok: false, reason: 'nhiễu trùng pinyin' };
+    if (q.typeId === 'hz2py' || q.typeId === 'vi2py') for (const o of wrong) if (pyKey(o.key) === pyKey(q.word.py)) return { ok: false, reason: 'nhiễu trùng pinyin' };
+    // V117: dạng mới — nhiễu không được có thể bị coi là đúng theo dữ liệu.
+    if (q.typeId === 'py2hz') for (const o of wrong) { if (pyKey(opts && opts.pyOf && opts.pyOf(o.key)) === pyKey(q.word.py)) return { ok: false, reason: 'nhiễu đồng âm' }; }
+    if (q.typeId === 'py2vi') for (const o of wrong) if (meaningsOverlap(o.key, q.word.vi)) return { ok: false, reason: 'nhiễu trùng nghĩa' };
+    if (q.typeId === 'hz2hv') for (const o of wrong) if (normText(o.key) === normText(q.word.hanviet)) return { ok: false, reason: 'nhiễu trùng Hán Việt' };
+    if (q.typeId === 'py2hz' || q.typeId === 'py2vi') { // đề chỉ có pinyin → không được lộ đáp án
+      if (String(q.prompt.main) !== String(q.word.py || '').normalize('NFC').trim()) return { ok: false, reason: 'đề pinyin không khớp' };
+    }
+    if (q.typeId === 'vi2py' && String(q.prompt.main).includes(q.word.py)) return { ok: false, reason: 'đề lộ pinyin' };
     // Đề không lộ đáp án.
     if (q.prompt.kind === 'audio') {
       const text = JSON.stringify({ m: q.prompt.main, s: q.prompt.sub, a: q.prompt.ask });
@@ -436,7 +516,7 @@ const QE = (function () {
     };
   }
 
-  return { TYPES, MCQ_ORDER, TYPED_ORDER, build, validate, buildMatch, toneSequence, toneVariants, normText, meaningSet, meaningsOverlap, pyKey, findSentences, placeCorrect };
+  return { TYPES, MCQ_ORDER, PRACTICE_ORDER, PRACTICE_TYPED_ORDER, TYPED_ORDER, build, validate, buildMatch, toneSequence, toneVariants, normText, meaningSet, meaningsOverlap, pyKey, findSentences, placeCorrect };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = QE;
