@@ -676,6 +676,7 @@ app.get('/api/study/session', async (req, res) => {
 //     đúng/sai, không tin giá trị answerCorrect nào từ client).
 function correctAnswerForQuizType(word, quizType) {
   if (quizType === 'vi2hz' || quizType === 'py2hz') return word.hz;
+  if (quizType === 'hz2hv') return word.hanviet; // V117: chữ Hán → chọn Hán Việt (luyện bổ sung)
   if (quizType === 'hz2py') return word.py; // V106: chữ Hán → chọn Pinyin (đối chiếu đúng chuỗi pinyin lưu trong DB)
   return word.vi; // mặc định/'hz2vi': nhìn chữ Hán → chọn nghĩa
 }
