@@ -87,9 +87,7 @@ function goTab(tab) {
   progressState.ui.lastTab = (tab === 'review') ? 'today' : tab;
   cacheProgressLocally();
   scheduleSync();
-  document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
-  const navBtn = document.getElementById('tab-' + tab);
-  if (navBtn) navBtn.classList.add('active');
+  navHighlight(tab); // V116: đánh dấu mục thanh dưới theo NHÓM của tab + vẽ chip phụ (js/nav.js)
   // Hiệu ứng fade/slide nhẹ CHỈ khi thực sự chuyển tab — không áp dụng khi chỉ đổi lựa chọn
   // trong cùng 1 tab (tránh bị "nháy" mỗi lần bấm chọn bài/Quyển).
   const el = document.getElementById('content');
@@ -317,7 +315,7 @@ function kbdIsTypingTarget(el) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
 }
 function kbdAnyModalOpen() {
-  return ['auth-gate', 'account-menu', 'danger-confirm-modal', 'pw-modal'].some(id => {
+  return ['auth-gate', 'account-menu', 'danger-confirm-modal', 'pw-modal', 'stroke-overlay', 'display-panel', 'more-sheet'].some(id => { // V116: thêm cửa sổ nét viết + 2 bảng của menu mới
     const el = document.getElementById(id);
     return el && getComputedStyle(el).display !== 'none';
   });

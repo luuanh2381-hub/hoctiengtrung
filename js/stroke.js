@@ -15,6 +15,19 @@ const STROKE_LIB_URLS = [
 const STROKE_MAX_CHARS = 6;
 let strokeLibPromise = null;
 let strokeWriters = [];
+let strokePaused = false; // đã tạm dừng đếm ngược tự chuyển câu khi mở cửa sổ nét viết (V116: trước đây dùng biến của word-notes.js)
+
+(function strokeInjectStyle() {
+  if (typeof document === 'undefined' || document.getElementById('stroke-style')) return;
+  const st = document.createElement('style');
+  st.id = 'stroke-style';
+  st.textContent = `
+  .stroke-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;display:flex;align-items:flex-end;justify-content:center}
+  .stroke-sheet{background:var(--paper,#fff);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px;box-sizing:border-box;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+  .stroke-title{font-size:1.05rem;margin-bottom:6px}.stroke-hint{font-size:.8rem;color:var(--muted);margin-bottom:8px;line-height:1.4}
+  .stroke-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;justify-content:center}`;
+  document.head.appendChild(st);
+})();
 
 // Tách các chữ Hán (bỏ ký tự khác, bỏ trùng lặp liên tiếp không cần) — tối đa STROKE_MAX_CHARS.
 function strokeChars(hz) {
@@ -52,8 +65,8 @@ function strokeClose() {
   const ov = document.getElementById('stroke-overlay');
   if (ov) ov.remove();
   strokeWriters = [];
-  if (typeof wnPausedCountdown !== 'undefined' && wnPausedCountdown) {
-    wnPausedCountdown = false;
+  if (strokePaused) {
+    strokePaused = false;
     if (typeof rvRatingPhase !== 'undefined' && rvRatingPhase === 'pending' && currentTab === 'review' && typeof rvShouldAutoCommit === 'function' && rvShouldAutoCommit()) rvStartCountdown(rvAttemptId);
   }
 }
@@ -72,16 +85,16 @@ function strokeAnimateAll() { strokeWriters.forEach((w, i) => setTimeout(() => {
 async function strokeOpen(hz) {
   if (typeof document === 'undefined' || document.getElementById('stroke-overlay')) return;
   const chars = strokeChars(hz);
-  // Tạm dừng đếm ngược tự chuyển câu (nếu đang chạy) — cùng cơ chế với trình soạn mẹo nhớ.
-  if (typeof rvCountdownTimer !== 'undefined' && rvCountdownTimer) { rvClearCountdown(); wnPausedCountdown = true; }
+  // Tạm dừng đếm ngược tự chuyển câu (nếu đang chạy) trong lúc xem nét viết.
+  if (typeof rvCountdownTimer !== 'undefined' && rvCountdownTimer) { rvClearCountdown(); strokePaused = true; }
   const ov = document.createElement('div');
-  ov.id = 'stroke-overlay'; ov.className = 'wn-overlay';
+  ov.id = 'stroke-overlay'; ov.className = 'stroke-ov';
   const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  ov.innerHTML = `<div class="wn-sheet" role="dialog" aria-label="Nét viết">
-    <div class="wn-title">✏️ Nét viết: <b>${esc(hz)}</b></div>
-    <div id="stroke-msg" class="wn-hint">${chars.length ? '⏳ Đang tải nét viết...' : 'Từ này không có chữ Hán để hiện nét.'}</div>
+  ov.innerHTML = `<div class="stroke-sheet" role="dialog" aria-label="Nét viết">
+    <div class="stroke-title">✏️ Nét viết: <b>${esc(hz)}</b></div>
+    <div id="stroke-msg" class="stroke-hint">${chars.length ? '⏳ Đang tải nét viết...' : 'Từ này không có chữ Hán để hiện nét.'}</div>
     <div id="stroke-boxes" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center"></div>
-    <div class="wn-actions" style="justify-content:center">
+    <div class="stroke-actions">
       <button class="btn btn-sm" id="stroke-play" disabled>▶ Xem nét</button>
       <button class="btn btn-sm" id="stroke-quiz" disabled>✍️ Tập viết</button>
       <button class="btn btn-sm" id="stroke-close">Đóng</button>

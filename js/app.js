@@ -121,7 +121,7 @@ bootPromise.then(async () => {
   if (localStorage.getItem('zaloWidgetHidden') === '1') return; // đã bị người dùng tắt trước đó
   const wrap = document.createElement('div');
   wrap.id = 'zalo-widget';
-  wrap.style.cssText = 'position:fixed;right:max(12px, env(safe-area-inset-right));bottom:max(12px, env(safe-area-inset-bottom));z-index:500;display:flex;align-items:center;';
+  wrap.style.cssText = 'position:fixed;right:max(12px, env(safe-area-inset-right));bottom:calc(max(12px, env(safe-area-inset-bottom)) + 62px);z-index:500;display:flex;align-items:center;'; /* V116: nâng lên trên thanh điều hướng dưới (cao ~58px) */
   wrap.innerHTML = `
     <a href="https://zalo.me/${ZALO_PHONE}" target="_blank" rel="noopener"
        title="Nhắn Zalo hỗ trợ"

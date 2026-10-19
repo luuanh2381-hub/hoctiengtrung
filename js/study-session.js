@@ -39,9 +39,7 @@ function ssSetActiveTabUI(tab) {
   progressState.ui.lastTab = (tab === 'review') ? 'today' : tab;
   cacheProgressLocally();
   scheduleSync();
-  document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
-  const navBtn = document.getElementById('tab-' + tab);
-  if (navBtn) navBtn.classList.add('active');
+  navHighlight(tab); // V116 (js/nav.js)
 }
 
 function ssRenderChooser(mode, saved) {

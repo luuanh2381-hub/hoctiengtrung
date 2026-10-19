@@ -73,11 +73,7 @@ function applyUIState() {
   const speedVal = document.getElementById('speed-val');
   if (speedVal) speedVal.textContent = ttsRate.toFixed(2);
   applyTheme(ui.theme);
-  const navBtn = document.getElementById('tab-' + currentTab);
-  if (navBtn) {
-    document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
-    navBtn.classList.add('active');
-  }
+  if (typeof navHighlight === 'function') navHighlight(currentTab); // V116 (js/nav.js)
 }
 let authMode = 'login'; // 'login' | 'register'
 let syncTimer = null;

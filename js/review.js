@@ -753,18 +753,17 @@ function rvQuestionBodyHtml(tagLabel, w) {
 }
 
 // V115: khối hiện trên màn đáp án khi trả lời SAI thẻ chính thức. Từ thường: 1 dòng nhắc đúng việc cần làm. Từ cứng đầu: đổi cách học
-// (lặp lại y nguyên đã không hiệu quả) — dùng đúng thứ có sẵn: chiết tự, Hán Việt, mẹo tự viết, nét chữ.
+// (lặp lại y nguyên đã không hiệu quả) — dùng đúng thứ có sẵn: chiết tự, Hán Việt, nét chữ. (V116: bỏ "mẹo tự viết" — tính năng mẹo nhớ đã gỡ khỏi giao diện.)
 function rvCorrectionHtml(w, r) {
   const info = rvLeechInfo(w, r && r.card);
   const hz = escapeJsAttr(w.hz);
-  const hasNote = typeof wnNotes !== 'undefined' && !!wnNotes[w.hz];
   if (!info.isLeech) {
     return `<div class="rv-correct-tip">🔁 Sai rồi — nhìn kỹ chữ, đọc to một lần. Từ này sẽ được hỏi lại sau ${RV_CORRECTION_GAP} câu bằng dạng khác.</div>`;
   }
   const why = info.lapses >= RV_LEECH_LAPSES ? `đã quên ${info.lapses} lần theo lịch ôn` : `sai ${info.wrongNow} lần trong buổi này`;
   const tips = [
     w.hanviet ? `Nối với âm Hán Việt <b>${escapeHtml(w.hanviet)}</b>: tự đặt một câu/hình ảnh có từ này.` : 'Tách chữ thành các phần ở trên, gắn mỗi phần với một hình ảnh.',
-    hasNote ? 'Đọc lại mẹo của bạn ở dưới, nếu chưa “bắt” thì sửa mẹo cho dễ nhớ hơn.' : 'Tự viết một mẹo nhớ ngắn (hình ảnh, câu chuyện, âm giống tiếng Việt) — tự nghĩ nhớ lâu hơn đọc sẵn.',
+    'Đọc to từ này 3 lần, vừa đọc vừa nhìn chữ — nghe + nhìn cùng lúc nhớ chắc hơn chỉ nhìn.',
     'Xem nét viết và tập viết lại một lần: viết giúp ghi nhớ hình chữ.',
   ];
   return `<div class="rv-leech">
@@ -772,7 +771,6 @@ function rvCorrectionHtml(w, r) {
     <div class="rv-leech-sub">Lặp lại y nguyên chưa hiệu quả. Thử đổi cách:</div>
     <ol class="rv-leech-list">${tips.map(t => `<li>${t}</li>`).join('')}</ol>
     <div class="rv-leech-actions">
-      <button class="btn btn-sm" onclick="wnOpenEditor('${hz}')">${hasNote ? '✍️ Sửa mẹo nhớ' : '✍️ Viết mẹo nhớ'}</button>
       <button class="btn btn-sm" onclick="strokeOpen('${hz}')">✏️ Xem nét viết</button>
     </div></div>`;
 }
@@ -792,7 +790,6 @@ function rvIntroHtml(tagLabel, w) {
       ${audioOk ? `<button id="rv-play" class="btn btn-sound btn-sm" onclick="speak('${escapeJsAttr(w.hz)}')">🔊 Nghe</button>` : ''}
       ${renderHanziParts(w.hz)}
       ${ex ? `<div class="rv-ex">${escapeHtml(ex.zh)}<br><span style="color:var(--muted);font-size:.85rem;">${escapeHtml(ex.vi || '')}</span></div>` : ''}
-      ${wnBlockHtml(w.hz)}
       <div style="text-align:center;margin-top:14px"><button class="btn btn-primary" onclick="rvIntroDone()">Đã xem — kiểm tra ngay</button></div>`;
 }
 
@@ -940,7 +937,6 @@ function renderReview() {
       ${renderHanziParts(w.hz)}
       ${rvExplainHtml()}
       ${(exD && !(rvQuestion && rvQuestion.typeId === 'cloze')) ? `<div class="rv-ex">${escapeHtml(exD.zh)}<br><span style="color:var(--muted);font-size:.85rem;">${escapeHtml(exD.vi || '')}</span></div>` : ''}
-      ${wnBlockHtml(w.hz)}
       <div style="text-align:center;margin-top:12px"><button class="btn btn-primary" onclick="rvPracticeContinue()">Tiếp tục</button></div>`;
   } else {
     // Đã có kết quả trắc nghiệm: lộ đáp án đầy đủ + bổ sung "Highlight System Rating" — hiện lại 4
@@ -965,7 +961,6 @@ function renderReview() {
       ${rvExplainHtml()}
       ${r && !r.correct ? rvCorrectionHtml(w, r) : ''}
       ${(ex && !(rvQuestion && rvQuestion.typeId === 'cloze')) ? `<div class="rv-ex">${ex.zh}<br><span style="color:var(--muted);font-size:.85rem;">${ex.vi}</span></div>` : ''}
-      ${wnBlockHtml(w.hz)}
       ${rvRenderRatingBar()}
       ${savedLine}
       ${(!isGuest && isAdminRole() && r && r.autoRating) ? `<div class="rv-saved-line">🐞 debug: auto rating = ${r.autoRating}</div>` : ''}`;
@@ -1078,7 +1073,7 @@ function rvPickPractice(btn) {
   if (!needsReading) {
     setTimeout(() => {
       if (attemptId === rvAttemptId && currentTab === 'review' && rvQueue.items[0] === item
-          && rvPhase === 'answered' && !document.getElementById('wn-overlay')) rvAdvanceQueue();
+          && rvPhase === 'answered' && !document.getElementById('stroke-overlay')) rvAdvanceQueue(); // V116: đang xem nét viết thì không tự chuyển câu
     }, 2000);
   }
 }

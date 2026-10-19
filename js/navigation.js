@@ -3,7 +3,8 @@
 // RENDER DISPATCHER
 // ════════════════════════════════════════════════════
 function render() {
-  document.getElementById('streak-badge').textContent = '🔥 ' + getStreak() + ' ngày';
+  document.getElementById('streak-badge').textContent = '🔥 ' + getStreak(); // V116: bỏ chữ "ngày" cho header gọn (có tooltip "Số ngày học liên tiếp")
+  if (typeof navSyncUI === 'function') navSyncUI(); // V116: chấm "đang ẩn Pinyin/nghĩa/Hán Việt" trên nút ⚙️
   // Task 4/5 (V70 Pha B): tab nào tính là "đang học thật" thì giữ phiên study_sessions sống +
   // chạy đồng hồ realtime; rời sang tab khác (Trang chủ, Thống kê, ...) thì dừng đếm/heartbeat lại
   // (phiên vẫn còn hiệu lực phía server trong 15 phút — quay lại sẽ nối tiếp, không tạo phiên mới).

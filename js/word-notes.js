@@ -1,3 +1,6 @@
+// V116: FILE NÀY KHÔNG CÒN ĐƯỢC NẠP (đã gỡ <script> khỏi index.html) — "Mẹo nhớ" bị bỏ khỏi giao diện theo yêu cầu.
+// Giữ lại nguyên vẹn để khôi phục được: thêm lại <script src="/js/word-notes.js"> + gọi wnBlockHtml(w.hz) ở review.js/flashcard.js.
+// Dữ liệu (bảng word_notes) và API /api/notes ở server VẪN GIỮ NGUYÊN, nên không mất mẹo đã viết.
 // js/word-notes.js — "✍️ Mẹo nhớ của bạn" (V105): ghi chú liên tưởng RIÊNG cho từng từ.
 // Tự nghĩ ra một liên tưởng (hình ảnh, câu chuyện, âm giống tiếng Việt) nhớ lâu hơn đọc liên tưởng có
 // sẵn. Dữ liệu lưu trên server theo tài khoản (/api/notes); client giữ 1 bản cache theo hz, tải 1 lần.
