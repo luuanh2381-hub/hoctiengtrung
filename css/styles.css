@@ -650,3 +650,6 @@ body.sw-on[data-sw-layout="focus"] .rv-card .quiz-opts,body.sw-on[data-sw-layout
   body.sw-on .rv-card .listen-play{width:64px;height:64px;font-size:1.7rem}
 }
 @media (hover:none){body.sw-on .kbd-hint{display:none}}
+
+.rv-counter-line{font-size:.82rem;margin:2px 0 8px}
+.rv-counter-line b{color:var(--ink)}
