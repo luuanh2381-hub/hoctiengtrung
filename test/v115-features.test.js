@@ -342,11 +342,10 @@ test('khối sửa lỗi: từ thường → 1 dòng nhắc; từ cứng đầu 
   const normal = R(ctx, "rvCorrectionHtml({ hz: '准备', lapses: 0 }, { correct: false })");
   assert.ok(normal.includes('hỏi lại sau 2 câu') && !normal.includes('🧲'));
   const leech = R(ctx, "rvCorrectionHtml({ hz: '准备', lapses: 5, hanviet: '<b>x</b>' }, { correct: false })");
-  assert.ok(leech.includes('🧲') && leech.includes("strokeOpen('准备')") && leech.includes("wnOpenEditor('准备')") && leech.includes('đã quên 5 lần') && leech.includes('Viết mẹo nhớ'));
+  // V116: bỏ tính năng mẹo nhớ → khối cứng đầu chỉ còn gợi ý Hán Việt / đọc to / nét viết, KHÔNG còn nút hay lời khuyên viết mẹo
+  assert.ok(leech.includes('🧲') && leech.includes("strokeOpen('准备')") && leech.includes('đã quên 5 lần') && leech.includes('Đọc to từ này'));
+  assert.ok(!/wnOpenEditor|mẹo/i.test(leech), 'không còn nhắc mẹo nhớ');
   assert.ok(!leech.includes('<b>x</b>'), 'Hán Việt từ dữ liệu phải được thoát HTML');
-  R(ctx, "wnNotes = { '准备': 'đã có mẹo' }"); // có mẹo → đổi lời khuyên + nhãn nút
-  const withNote = R(ctx, "rvCorrectionHtml({ hz: '准备', lapses: 5 }, { correct: false })");
-  assert.ok(withNote.includes('Sửa mẹo nhớ') && withNote.includes('Đọc lại mẹo của bạn'));
 });
 test('màn đáp án của thẻ SAI có khối sửa lỗi; thẻ ĐÚNG thì không', () => {
   const ctx = makeEnv(); load(ctx, [item('review', '准备', { word: Object.assign({}, POOL[0], { lapses: 6 }) })]);
