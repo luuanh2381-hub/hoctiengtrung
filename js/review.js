@@ -1038,8 +1038,7 @@ function renderReview() {
   if (rvPhase === 'intro') counter += ' · xem kỹ từ mới';
   else if (practice || rvPhase === 'match') counter += ' · luyện bổ sung · không tính vào lịch ôn';
   return `
-    <div class="rv-counter rv-counter-line" role="status" aria-live="polite">${counter}</div>
-    <div class="rv-card" data-phase="${rvPhase}" data-q="${rvPhase === 'match' ? 'match' : (rvQuestion ? rvQuestion.typeId : '')}" data-kind="${(rvPhase === 'question' && rvQuestion && rvQuestion.prompt) ? rvQuestion.prompt.kind : ''}">${body}</div>
+    <div class="rv-card" data-phase="${rvPhase}" data-q="${rvPhase === 'match' ? 'match' : (rvQuestion ? rvQuestion.typeId : '')}" data-kind="${(rvPhase === 'question' && rvQuestion && rvQuestion.prompt) ? rvQuestion.prompt.kind : ''}"><div class="rv-counter rv-counter-line" role="status" aria-live="polite">${counter}</div><div class="rv-body">${body}</div></div>
   `;
 }
 
