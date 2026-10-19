@@ -659,3 +659,22 @@ body.sw-on[data-sw-layout="focus"] .rv-card .quiz-opts,body.sw-on[data-sw-layout
 .rv-card>.rv-body{flex:1 1 auto;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-width:0}
 body.sw-on[data-sw-layout="focus"] .rv-card{min-height:calc(var(--sw-vh,100dvh) - 96px)}
 body.sw-on[data-sw-layout="max-space"] .rv-card{min-height:calc(var(--sw-vh,100dvh) - 72px)}
+
+/* V117: hàng đầu khung học = tiến độ (trái) + nút điều khiển thu gọn (phải). Hẹp → chỉ icon + số (container query). */
+.rv-head{display:flex;align-items:center;justify-content:space-between;gap:6px;container:rvh/inline-size;align-self:stretch;flex:none;margin:0 0 4px;min-height:34px}
+.rv-head .rv-counter-line{flex:1;min-width:0;margin:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:2px 12px;font-size:.82rem}
+.rv-ct{white-space:nowrap}
+.rv-card>.rv-head{margin:0 0 4px}
+.rv-head-act{display:none;gap:4px;flex:none}
+.sw-ib{font:inherit;font-size:1rem;min-width:36px;min-height:36px;border:1.5px solid var(--border);border-radius:12px;background:var(--paper);color:var(--ink);cursor:pointer;padding:0}
+body.sw-on[data-sw-layout="focus"] .rv-head-act,body.sw-on[data-sw-layout="max-space"] .rv-head-act{display:inline-flex}
+body.sw-on[data-sw-layout="focus"] .rv-head .rv-counter-line,body.sw-on[data-sw-layout="max-space"] .rv-head .rv-counter-line{justify-content:flex-start}
+@container rvh (max-width:560px){.rv-ct-t{display:none}.rv-head .rv-counter-line{gap:2px 10px}}
+/* Có hàng đầu trong khung → thanh điều khiển riêng ẩn đi, khung học chiếm hết chiều cao */
+body.sw-on[data-sw-layout="focus"]:has(.rv-head) .sw-bar,body.sw-on[data-sw-layout="max-space"]:has(.rv-head) .sw-bar{display:none}
+body.sw-on[data-sw-layout="focus"]:has(.rv-head) #content,body.sw-on[data-sw-layout="max-space"]:has(.rv-head) #content{padding-top:max(6px,env(safe-area-inset-top))}
+body.sw-on[data-sw-layout="focus"]:has(.rv-head) .rv-card{min-height:calc(var(--sw-vh,100dvh) - 36px - env(safe-area-inset-top,0px))}
+body.sw-on[data-sw-layout="max-space"]:has(.rv-head) .rv-card{min-height:calc(var(--sw-vh,100dvh) - 22px - env(safe-area-inset-top,0px))}
+/* Bảng cài đặt ở 2 chế độ này nổi lên trên cùng (không còn thanh điều khiển để bám) */
+body.sw-on[data-sw-layout="focus"] .sw-panel,body.sw-on[data-sw-layout="max-space"] .sw-panel{position:fixed;top:max(8px,env(safe-area-inset-top));left:8px;right:8px;margin:0 auto;z-index:200;max-height:calc(var(--sw-vh,100dvh) - 24px)}
+body.sw-on .rv-card>.rv-head{max-width:none !important;width:100%}
