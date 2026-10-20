@@ -97,16 +97,25 @@ async function fcRelearnFromStart() {
 
 // Chiết tự bộ thủ lấy từ database (AI sinh, phủ toàn bộ từ vựng) — tải 1 lần lúc mở app
 let dbHanziParts = {};
-async function loadHanziParts() {
+// V118.1: theo dõi trạng thái tải để KHÔNG báo "đang chờ AI" khi thực ra chỉ là tải chiết tự thất bại/chưa xong.
+// 'idle' → chưa tải; 'loading'; 'ok' → đã nạp từ máy chủ; 'failed' → lỗi mạng/HTTP/phiên hết hạn (sẽ tự thử lại).
+let hanziPartsState = 'idle';
+async function loadHanziParts(attempt) {
+  attempt = attempt || 0;
   if (isGuest || !authToken) return;
+  if (hanziPartsState === 'loading') return;
+  hanziPartsState = 'loading';
   try {
     const res = await fetch('/api/hanzi-parts', { headers: authHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    if (data.ok && Array.isArray(data.parts)) {
-      for (const row of data.parts) dbHanziParts[row.hz] = row.parts;
-    }
+    if (!(data && data.ok && Array.isArray(data.parts))) throw new Error('bad payload');
+    for (const row of data.parts) dbHanziParts[row.hz] = row.parts;
+    hanziPartsState = 'ok';
   } catch {
-    // Không tải được thì dùng tạm từ điển có sẵn trong code (phủ ít hơn), không chặn app
+    // Không tải được thì dùng tạm từ điển có sẵn trong code (phủ ít hơn), không chặn app — và tự thử lại (tối đa 2 lần, 3s/6s).
+    hanziPartsState = 'failed';
+    if (attempt < 2) setTimeout(() => loadHanziParts(attempt + 1), 3000 * (attempt + 1));
   }
 }
 
@@ -135,7 +144,12 @@ function renderHanziParts(hz, expanded) {
     }
     // Chưa có dữ liệu — chỉ báo "đang chờ" cho chữ Hán thật sự (bỏ qua số/chữ Latin lẫn trong từ)
     if (!cjk.test(ch)) return '';
-    return `<div class="fc-parts-row"><span class="fc-parts-char">${ch}</span><span class="fc-parts-comps fc-parts-note" style="opacity:.65">⏳ Đang chờ AI xử lý chữ này</span></div>`;
+    // V118.1: phân biệt 3 tình huống — đang/chưa tải xong, tải lỗi, và máy chủ thật sự chưa có chữ này.
+    if (hanziPartsState !== 'ok' && !isGuest && authToken) {
+      if (hanziPartsState === 'idle' || hanziPartsState === 'failed') loadHanziParts(); // thử lại ngầm, không chặn vẽ
+      return `<div class="fc-parts-row"><span class="fc-parts-char">${ch}</span><span class="fc-parts-comps fc-parts-note" style="opacity:.65">⏳ Đang tải chiết tự…</span></div>`;
+    }
+    return `<div class="fc-parts-row"><span class="fc-parts-char">${ch}</span><span class="fc-parts-comps fc-parts-note" style="opacity:.65">Chưa có chiết tự cho chữ này</span></div>`;
   }).join('');
   if (!rows) return '';
   return `<div class="fc-parts-wrap${expanded ? ' qz-parts' : ''}" onclick="event.stopPropagation()"><div class="fc-parts-title">🧩 Bộ thủ / thành phần</div>${rows}</div>`;
