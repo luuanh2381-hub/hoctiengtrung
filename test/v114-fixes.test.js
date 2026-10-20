@@ -59,6 +59,7 @@ function makeEnv(over) {
   }, over || {});
   vm.createContext(ctx);
   vm.runInContext(read('js/skill-score.js'), ctx);
+  vm.runInContext(read('js/session-summary.js'), ctx); // V118: tổng kết + trần luyện lại
   vm.runInContext(read('js/question-engine.js'), ctx);
   vm.runInContext(read('js/question-selector.js'), ctx);
   vm.runInContext(read('js/review.js'), ctx);

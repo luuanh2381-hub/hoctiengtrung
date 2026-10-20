@@ -222,7 +222,7 @@ function makeEnv(over) {
     fetch: async (url, opts) => { calls.fetch.push({ url, body: opts && opts.body ? JSON.parse(opts.body) : null }); return { json: async () => ({ ok: true, systemRating: 'good' }) }; },
   }, over || {});
   vm.createContext(ctx);
-  for (const f of ['js/answer-match.js', 'js/skill-score.js', 'js/question-engine.js', 'js/question-selector.js', 'js/review.js']) vm.runInContext(read(f), ctx);
+  for (const f of ['js/answer-match.js', 'js/skill-score.js', 'js/session-summary.js', 'js/question-engine.js', 'js/question-selector.js', 'js/review.js']) vm.runInContext(read(f), ctx);
   ctx.__calls = calls;
   return ctx;
 }

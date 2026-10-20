@@ -60,6 +60,7 @@ function makeEnv(opts) {
   };
   vm.createContext(ctx);
   vm.runInContext(read('js/skill-score.js'), ctx); // V111: bộ chọn dùng SS để cập nhật hồ sơ sau mỗi câu
+  vm.runInContext(read('js/session-summary.js'), ctx); // V118: tổng kết + trần luyện lại
   vm.runInContext(read('js/question-engine.js'), ctx);
   vm.runInContext(read('js/question-selector.js'), ctx);
   const consts = ['RV_AUTO_COMMIT_MS', 'RV_NEW_GAP', 'RV_DRILL_GAP', 'RV_DRILL_MAX_TRIES', 'RV_EXTRA_MAX', 'RV_PRACTICE_TYPES', 'RV_CORRECTION_GAP'].map(constLine).join('\n'); // V115: rvAdvanceQueue dùng RV_CORRECTION_GAP

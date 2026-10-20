@@ -239,7 +239,7 @@ function reviewEnv(extra) {
     genIdempotencyKey: () => 'k', todayKey: () => '2026-10-19', goTab() {}, submitFsrsReviewAwaited: async () => ({ ok: true }), submitSkillPractice: async () => ({ ok: true }), SUBMIT_REVIEW_MAX_WAIT_MS: 1000, alert() {},
   }, extra || {});
   vm.createContext(ctx);
-  for (const f of ['js/skill-score.js', 'js/question-engine.js', 'js/question-selector.js', 'js/review.js']) vm.runInContext(read(f), ctx);
+  for (const f of ['js/skill-score.js', 'js/session-summary.js', 'js/question-engine.js', 'js/question-selector.js', 'js/review.js']) vm.runInContext(read(f), ctx);
   return ctx;
 }
 const R = (ctx, code) => vm.runInContext(code, ctx);
