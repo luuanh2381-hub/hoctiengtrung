@@ -45,7 +45,7 @@
     "test:v115": "node test/v115-features.test.js",
     "test:v116": "node test/v116-menu.test.js",
     "test:v117": "node test/v117-workspace.test.js",
-    "test:v118": "node test/v118-adaptive.test.js"
+    "test:v118": "node test/v118-adaptive.test.js && node test/v118-hanzi-parts.test.js"
   },
   "dependencies": {
     "express": "^4.19.2",
