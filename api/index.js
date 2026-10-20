@@ -14,7 +14,7 @@ const { readDB, updateDB, updateDBWithFsrsCleanup, getVocabByLessons, getVocabCo
   getVocabWordsByLesson, updateVocabWord, deleteVocabWord,
   removeVocabWordFromLesson, setVocabWordLessons, findVocabWordByHz, // V93 (audit thống nhất từ vựng)
   getAllVocabWords, updateVocabHanviet, getWordExampleCounts, insertWordExamples, getWordExamplesForLessons,
-  getAllHanziParts, getHanziPartsKeys, insertHanziParts,
+  getAllHanziParts, getHanziPartsKeys, insertHanziParts, deleteHanziParts,
   insertActivityLog, getActivityLogs, reserveGeminiSlot, bumpGeminiRateLimit,
   getWeakFsrsCards, getFsrsCardsDebug,
   getWordForAnswerCheck, countKnownFsrsWords, getKnownCountsForUsers, getKnownCountsByLesson,
@@ -2569,6 +2569,7 @@ const WORD_BATCH_SIZE = 12;
 // Logic sinh CHIẾT TỰ BỘ THỦ cho từng chữ Hán đơn lẻ (khác word_examples — đây là phân tích cấu tạo
 // mặt chữ, không phải câu ví dụ). Chữ nào không tách được rõ ràng thì AI chỉ ghi 1 ghi chú ngắn.
 const HANZI_BATCH_SIZE = 20;
+const { normalizeParts, auditParts } = require('../lib/hanzi-parts');
 function extractUniqueChars(words) {
   const set = new Set();
   const cjk = /[\u4e00-\u9fff]/;
@@ -2658,8 +2659,10 @@ async function runHanziPartsGeneration(timeBudgetMs) {
   const TIME_BUDGET_MS = timeBudgetMs || 50000;
   const allWords = await getAllVocabWords();
   const charSet = extractUniqueChars(allWords);
-  const existing = await getHanziPartsKeys();
-  const pending = [...charSet].filter(ch => !existing.has(ch)).sort();
+  // V118.2: "chưa xong" = chưa có dòng HOẶC có dòng nhưng không dùng được (rỗng/sai dạng) — dòng hỏng được xoá để sinh lại.
+  const audit = auditParts(await getAllHanziParts(), charSet);
+  if (audit.invalid.length) await deleteHanziParts(audit.invalid);
+  const pending = [...audit.invalid, ...audit.missing].sort();
   let batches = 0, done = 0, errors = 0;
   const errorSamples = []; // vài lỗi mẫu (không lặp lại thông điệp) để hiện chi tiết cho admin xem
 
@@ -2806,8 +2809,8 @@ app.get('/api/hanzi-parts', async (req, res) => {
   const authed = await requireAuth(req, res);
   if (!authed) return;
   try {
-    const rows = await getAllHanziParts();
-    res.set('Cache-Control', 'private, max-age=120');
+    const rows = (await getAllHanziParts()).map(r => ({ hz: r.hz, parts: normalizeParts(r.parts) })).filter(r => r.parts);
+    res.set('Cache-Control', 'private, no-cache'); // V118.2: bỏ cache 120s — dữ liệu vừa sinh xong phải thấy ngay
     res.json({ ok: true, parts: rows });
   } catch (e) { fail(res, e); }
 });
@@ -2820,9 +2823,9 @@ app.get('/api/admin/hanzi-parts/progress', async (req, res) => {
   try {
     const allWords = await getAllVocabWords();
     const charSet = extractUniqueChars(allWords);
-    const existing = await getHanziPartsKeys();
-    const done = [...charSet].filter(c => existing.has(c)).length;
-    res.json({ ok: true, total: charSet.size, done });
+    const audit = auditParts(await getAllHanziParts(), charSet); // V118.2: chỉ tính dòng DÙNG ĐƯỢC
+    res.json({ ok: true, total: charSet.size, done: audit.done, invalidCount: audit.invalid.length, missingCount: audit.missing.length,
+      invalid: audit.invalid.slice(0, 40), missing: audit.missing.slice(0, 40) });
   } catch (e) { fail(res, e); }
 });
 
