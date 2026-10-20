@@ -178,7 +178,7 @@ function rvRecordAnswer(item, q, correct, ms, official) {
     for (const other of rvQueue.items) if (other !== item && other.word && other.word.hz === q.hz) other.skillProfile = updated;
   }
   QS.record(rvQSession, q, correct, ms);
-  rvLog.push({ hz: q.hz, l: q.l, typeId: q.typeId, skill: q.skill, correct: !!correct, ms: ms == null ? null : Math.round(ms), official: !!official, source: item.type, hinted: !!q.hinted });
+  rvLog.push({ hz: q.hz, l: q.l, typeId: q.typeId, skill: q.skill, correct: !!correct, ms: ms == null ? null : Math.round(ms), official: !!official, source: item.type, hinted: !!q.hinted, intro: rvIsIntroExposure(item) }); // V118: intro = lượt chính thức đầu sau màn giới thiệu (vừa xem đáp án) → không dùng làm bằng chứng kỹ năng ở tổng kết
   if (rvLog.length > 400) rvLog.shift();
 }
 function rvRestoreQSession() {
@@ -706,6 +706,7 @@ function rvExplainHtml() {
     const blank = !t.value;
     typedLine = `<div><b>${blank ? 'Bạn đã bỏ qua câu này' : 'Bạn đã gõ: ' + escapeHtml(t.value)}</b>` +
       `${!blank && AM.VERDICT_TEXT[t.verdict] ? ` — ${escapeHtml(AM.VERDICT_TEXT[t.verdict])}` : ''}` +
+      `${!blank && t.verdict === 'tone_mismatch' && AM.toneFeedback ? (() => { const f = AM.toneFeedback(t.value, q.correctKey); return f ? `<br>${escapeHtml(f)}` : ''; })() : ''}` + // V118: chỉ rõ âm tiết nào sai thanh
       `${t.correct ? '' : `<br>Đáp án chuẩn: ${escapeHtml(q.correctKey)}`}</div>`;
   }
   return `<div class="rv-explain">${typedLine}${q.explanation.map(l => `<div>${escapeHtml(l)}</div>`).join('')}</div>`;
@@ -876,12 +877,15 @@ function rvSummaryHtml() {
   const byType = {};
   for (const e of rvLog) { const b = byType[e.typeId] || (byType[e.typeId] = { n: 0, ok: 0 }); b.n++; if (e.correct) b.ok++; }
   const typeRows = Object.keys(byType).map(id => `<tr><td>${escapeHtml(typeLabel(id))}</td><td>${byType[id].ok}/${byType[id].n}</td><td>${Math.round(byType[id].ok / byType[id].n * 100)}%</td></tr>`).join('');
-  const SK = { recognition: 'Nhận diện', recall: 'Nhớ chủ động', listening: 'Nghe', pinyin: 'Pinyin', context: 'Từ trong câu' };
-  const bySkill = {};
-  for (const e of rvLog) { const b = bySkill[e.skill] || (bySkill[e.skill] = { n: 0, ok: 0 }); b.n++; if (e.correct) b.ok++; }
-  // Kỹ năng cần cải thiện: CHỈ khi có ≥3 câu của kỹ năng đó trong buổi và tỉ lệ đúng < 70%; còn lại "chưa đủ dữ liệu".
-  const weakSkills = Object.keys(bySkill).filter(k => bySkill[k].n >= 3 && bySkill[k].ok / bySkill[k].n < 0.7).map(k => SK[k] || k);
-  const thinSkills = Object.keys(bySkill).filter(k => bySkill[k].n < 3).map(k => SK[k] || k);
+  // V118 — thống kê theo kỹ năng tính bằng SM.summarize (js/session-summary.js): tách số câu / số từ duy nhất, loại câu vừa xem đáp án
+  // (check/redo/lượt đầu sau giới thiệu) khỏi bằng chứng kỹ năng, và chỉ kết luận khi đủ câu + đủ số từ khác nhau.
+  const SMY = SM.summarize(rvLog);
+  const SK = SM.SKILL_NAME;
+  const LEVEL_TXT = { insufficient: 'Chưa đủ dữ liệu', developing: 'Đang hình thành', good: 'Khá tốt trong buổi này', weak: 'Cần luyện thêm' };
+  const skillKeys = Object.keys(SMY.skills);
+  const weakSkills = skillKeys.filter(k => SMY.skills[k].level === 'weak').map(k => SK[k] || k);
+  const skillRows = skillKeys.map(k => { const x = SMY.skills[k]; return `<tr><td>${escapeHtml(SK[k] || k)}</td><td>${x.answers} câu / ${x.words} từ</td><td>${x.enough ? Math.round(x.rate * 100) + '%' : '—'}</td><td>${escapeHtml(LEVEL_TXT[x.level])}</td></tr>`; }).join('');
+  const wordChips = (list) => list.slice(0, 8).map(hz => escapeHtml(hz)).join('　');
   // Từ cần ôn lại: từ có lần trả lời CUỐI CÙNG trong buổi là sai.
   const last = new Map();
   for (const e of rvLog) last.set(e.hz, e);
@@ -899,17 +903,12 @@ function rvSummaryHtml() {
   const firstHinted = [...firstByHz.values()].filter(e => e.correct && e.hinted).length;
   const officialN = rvLog.filter(e => e.official).length;
   const ctxLog = rvLog.filter(e => e.skill === 'context');
-  const skillTested = Object.keys(bySkill).map(k => `${SK[k] || k} (${bySkill[k].n})`).join(', ');
   // Từ cần chú ý: sai ≥ 2 lần trong buổi, hoặc lần trả lời cuối vẫn sai (đã có ở wrongWords).
   const wrongCount = new Map();
   for (const e of rvLog) if (!e.correct) wrongCount.set(e.hz, (wrongCount.get(e.hz) || 0) + 1);
   const attentionHz = new Set([...wrongCount].filter(([, n]) => n >= 2).map(([hz]) => hz));
-  // Đề xuất luyện tiếp: CHỈ dựa vào dữ liệu của buổi (≥ 3 câu cùng kỹ năng mới kết luận); không đủ dữ liệu thì nói không đủ.
-  const SK_TIP = { recognition: 'dạng Chữ Hán → Nghĩa / Pinyin → Nghĩa', recall: 'dạng Nghĩa → Chữ Hán / Pinyin → Chữ Hán', listening: 'các câu Nghe → chọn', pinyin: 'dạng Chữ Hán → Pinyin / Nghĩa → Pinyin', context: 'bài Điền từ vào câu' };
-  const rawWeak = Object.keys(bySkill).filter(k => bySkill[k].n >= 3 && bySkill[k].ok / bySkill[k].n < 0.7);
-  const nextTips = rawWeak.map(k => `${SK[k] || k}: luyện thêm ${SK_TIP[k] || 'dạng này'}.`);
-  if (wrongWords.length) nextTips.push(`Có ${wrongWords.length} từ lần trả lời cuối vẫn sai — bấm “Luyện lại câu sai”.`);
-  if (!nextTips.length) nextTips.push(rvLog.length >= 8 ? 'Buổi này chưa thấy kỹ năng nào yếu rõ rệt. Cứ ôn đúng lịch FSRS.' : 'Buổi này còn ít câu nên chưa đủ dữ liệu để đề xuất.');
+  // Đề xuất luyện tiếp: CHỈ dựa vào dữ liệu của buổi (SM.tipsFrom) — không đủ dữ liệu thì nói rõ cần thêm gì.
+  const nextTips = SMY.tips.map(t => t.text);
   const counts = (rvSummary.reviewCount || rvSummary.newCount) ? `Đã ôn ${rvSummary.reviewCount} từ, học ${rvSummary.newCount} từ mới.` : '';
   return `<div class="rv-done" style="text-align:left">
     <div style="text-align:center"><div class="rv-done-num">🎉</div>
@@ -924,11 +923,15 @@ function rvSummaryHtml() {
       <div class="rv-start-cell"><div class="rv-start-num">${acc}%</div><div class="rv-start-lbl">Tỉ lệ đúng trong buổi</div></div>
       <div class="rv-start-cell"><div class="rv-start-num">${mins == null ? '—' : mins + ' phút'}</div><div class="rv-start-lbl">Thời gian học</div></div>
     </div>
-    <div style="font-size:.85rem;margin:2px 0 6px"><b>Kỹ năng đã kiểm tra:</b> ${skillTested ? escapeHtml(skillTested) : '—'}</div>
+    <div style="font-size:.85rem;margin:2px 0 6px"><b>Lượt ôn chính thức:</b> ${SMY.officialAnswers} · <b>Luyện bổ sung:</b> ${SMY.practiceAnswers}</div>
     <div style="font-weight:800;margin-top:6px">Kết quả theo dạng bài</div>
     <table class="rv-sum-table"><tr><th>Dạng bài</th><th>Đúng</th><th>Tỉ lệ</th></tr>${typeRows}</table>
-    <div style="font-weight:800">Kỹ năng cần cải thiện</div>
-    <div style="font-size:.9rem;margin:4px 0 8px">${weakSkills.length ? escapeHtml(weakSkills.join(', ')) : 'Chưa phát hiện kỹ năng yếu trong buổi này.'}${thinSkills.length ? `<div style="color:var(--muted);font-size:.8rem">Chưa đủ dữ liệu (dưới 3 câu): ${escapeHtml(thinSkills.join(', '))}</div>` : ''}</div>
+    <div style="font-weight:800">Kỹ năng trong buổi này</div>
+    ${skillRows ? `<table class="rv-sum-table"><tr><th>Kỹ năng</th><th>Đã hỏi</th><th>Đúng</th><th>Đánh giá</th></tr>${skillRows}</table>` : ''}
+    <div style="font-size:.8rem;color:var(--muted);margin:2px 0 8px">Chỉ kết luận khi có ≥ ${SM.MIN_ANSWERS} câu từ ≥ ${SM.MIN_WORDS} từ khác nhau; không tính câu vừa xem đáp án (kiểm tra sau giới thiệu, luyện lại).${weakSkills.length ? ` Cần luyện thêm: ${escapeHtml(weakSkills.join(', '))}.` : ''}</div>
+    ${SMY.recognizedNotRecalled.length ? `<div style="font-weight:800">Nhận diện được nhưng chưa tự nhớ (${SMY.recognizedNotRecalled.length})</div><div style="font-size:1rem;margin:4px 0 8px">${wordChips(SMY.recognizedNotRecalled)}</div>` : ''}
+    ${SMY.listeningWeak.length ? `<div style="font-weight:800">Nghe chưa tốt (${SMY.listeningWeak.length})</div><div style="font-size:1rem;margin:4px 0 8px">${wordChips(SMY.listeningWeak)}</div>` : ''}
+    ${SMY.pinyinWeak.length ? `<div style="font-weight:800">Pinyin / thanh điệu chưa tốt (${SMY.pinyinWeak.length})</div><div style="font-size:1rem;margin:4px 0 8px">${wordChips(SMY.pinyinWeak)}</div>` : ''}
     <div style="font-weight:800">Từ cần ôn lại ${wrongWords.length ? `(${wrongWords.length})` : ''}</div>
     ${weakHtml || '<div style="color:var(--muted);font-size:.9rem;margin:4px 0 8px">Không có từ nào sai ở lần trả lời cuối.</div>'}
     ${attentionHz.size ? `<div style="font-weight:800;margin-top:6px">Từ cần chú ý (sai từ 2 lần trong buổi)</div><div style="font-size:1rem;margin:4px 0 8px">${[...attentionHz].slice(0, 10).map(hz => escapeHtml(hz)).join('　')}</div>` : ''}
@@ -1279,7 +1282,8 @@ function rvAdvanceQueue() {
       // LUYỆN BỔ SUNG (type 'redo') sau RV_CORRECTION_GAP thẻ, hỏi bằng DẠNG KHÁC lần sai. 'redo' = lượt vừa xem đáp án nên server không cộng
       // vào điểm kỹ năng và không đổi lịch FSRS; thẻ chính thức vẫn quay lại như cũ để đo trí nhớ thật.
       // Chỉ chèn khi thẻ chính thức còn cách xa hơn RV_CORRECTION_GAP (hàng đợi sắp hết thì thẻ chính thức quay lại ngay, không cần cầu nối).
-      if (Math.min(REPEAT_GAP, rvQueue.items.length - 1) > RV_CORRECTION_GAP) {
+      // V118: mỗi từ có TRẦN số câu luyện lại trong 1 phiên (SM.canQueueRedo) — từ cứ sai mãi không sinh thêm redo vô hạn; thẻ chính thức vẫn quay lại bình thường.
+      if (Math.min(REPEAT_GAP, rvQueue.items.length - 1) > RV_CORRECTION_GAP && SM.canQueueRedo(rvLog, rvQueue.items, it.word.hz)) {
         rvQueue.items.splice(RV_CORRECTION_GAP, 0,
           { type: 'redo', word: it.word, failedTypes: rvQuestion ? [rvQuestion.typeId] : [], targetSkill: rvQuestion ? rvQuestion.skill : undefined, correction: true });
       }

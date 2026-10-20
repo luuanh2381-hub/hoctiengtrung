@@ -50,6 +50,10 @@ const QS = (function () {
     sameAsPrev: 1.0, streak3: 2.0,
     diversityPerUse: 0.1, diversityCap: 1.0,
     struggleWindow: 4, struggleWrong: 3, struggleWeakDamp: 0.3, struggleEasyBonus: 1.5,
+    // V118 — SAI LẶP LẠI → ĐỔI CHIỀU TRUY XUẤT: câu gần nhất của CHÍNH TỪ NÀY trong buổi bị sai → cộng cho dạng thuộc kỹ năng KHÁC
+    // kỹ năng vừa sai (vd sai Chữ Hán→Nghĩa thì thử Nghĩa→Chữ Hán / Nghe / Pinyin). Sai từ 2 lần trở lên: cộng mạnh hơn, và trừ nhẹ
+    // dạng cùng kỹ năng với các lần sai (không hỏi lại đúng cách đã thất bại). Đổi vị trí đáp án KHÔNG phải là đổi chiều.
+    shiftBonus: 1.2, shiftBonusRepeat: 2.0, sameSkillAfterWrongPenalty: 0.5,
   };
   const WEAK_THRESHOLD = 0.6;
 
@@ -84,6 +88,20 @@ const QS = (function () {
     return next;
   }
   function pairKey(hz, typeId) { return hz + '|' + typeId; }
+  // Lịch sử CỦA MỘT TỪ trong buổi: { lastWrongSkill (null nếu câu gần nhất không sai), wrongSkills: {skill: số lần sai} }.
+  function wordTrail(session, hz) {
+    const out = { lastWrongSkill: null, wrongSkills: {}, wrongTotal: 0 };
+    const h = (session && session.history) || [];
+    let lastSeen = null;
+    for (const x of h) {
+      if (x.hz !== hz) continue;
+      const T = QE.TYPES[x.typeId]; if (!T) continue; // 'match' và dạng không có trong QE.TYPES không phải một chiều truy xuất
+      lastSeen = x;
+      if (!x.correct) { out.wrongSkills[T.skill] = (out.wrongSkills[T.skill] || 0) + 1; out.wrongTotal++; }
+    }
+    if (lastSeen && !lastSeen.correct) out.lastWrongSkill = QE.TYPES[lastSeen.typeId].skill;
+    return out;
+  }
 
   // Ghi nhận 1 câu đã hỏi xong (gọi sau khi người học trả lời).
   function record(session, q, correct, ms) {
@@ -176,6 +194,11 @@ const QS = (function () {
       s -= Math.min(W.diversityCap, W.diversityPerUse * (session.typeCount[typeId] || 0));
     }
     if (tough && typeId === 'hz2vi') s += W.struggleEasyBonus;
+    if (session && word) { // V118: đổi chiều truy xuất sau khi sai chính từ này
+      const tr = wordTrail(session, word.hz);
+      if (tr.lastWrongSkill && tr.lastWrongSkill !== skill) s += tr.wrongTotal >= 2 ? W.shiftBonusRepeat : W.shiftBonus;
+      if (tr.wrongSkills[skill] && tr.wrongTotal >= 2) s -= W.sameSkillAfterWrongPenalty;
+    }
     return s;
   }
 
@@ -220,6 +243,7 @@ const QS = (function () {
     const nm = SK_NAME[q.skill] || q.skill;
     const pct = (x) => Math.round(x * 100) + '%';
     if (q.confusionInjected) return `Có đáp án “${q.confusionInjected.text}” vì bạn từng chọn nhầm nó nhiều lần với từ này.`;
+    { const tr = wordTrail(session, q.hz); if (tr.lastWrongSkill && tr.lastWrongSkill !== q.skill) return `Bạn vừa sai từ này ở dạng ${SK_NAME[tr.lastWrongSkill] || tr.lastWrongSkill}, nên lần này đổi cách nhớ sang ${nm}.`; } // V118
     if (q.typed) return `Bạn đã làm tốt ${nm} (${pct(p.score)}) ở dạng chọn đáp án, nên lần này thử tự gõ.`;
     if (p && p.status === 'weak') return `${nm} của từ này còn yếu (${pct(p.score)} sau ${p.attempts} lượt) nên ưu tiên dạng này.`;
     if (p && p.fragile) return `Câu trước về ${nm} bạn đúng nhưng hơi chậm — luyện thêm cho chắc.`;
@@ -252,7 +276,7 @@ const QS = (function () {
     return QE.build('hz2vi', word, Object.assign({}, ctx, { minOptions: 2 })) || null;
   }
 
-  return { WEIGHTS, newSession, record, learn, isHesitant, wordHardness, explainChoice, rank, choose, scoreType, struggling };
+  return { WEIGHTS, newSession, record, learn, isHesitant, wordHardness, explainChoice, rank, choose, scoreType, struggling, wordTrail };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = QS;
