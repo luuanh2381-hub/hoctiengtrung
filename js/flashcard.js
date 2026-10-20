@@ -110,7 +110,11 @@ async function loadHanziParts(attempt) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (!(data && data.ok && Array.isArray(data.parts))) throw new Error('bad payload');
-    for (const row of data.parts) dbHanziParts[row.hz] = row.parts;
+    for (const row of data.parts) {
+      let pr = row.parts;
+      if (typeof pr === 'string') { try { pr = JSON.parse(pr); } catch { pr = null; } } // V118.2: dòng bị mã hoá JSON 2 lần
+      if (pr) dbHanziParts[row.hz] = pr;
+    }
     hanziPartsState = 'ok';
   } catch {
     // Không tải được thì dùng tạm từ điển có sẵn trong code (phủ ít hơn), không chặn app — và tự thử lại (tối đa 2 lần, 3s/6s).

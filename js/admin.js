@@ -278,7 +278,8 @@ async function loadHanVietProgress() {
         <span>${data.done} / ${data.total} từ đã có nghĩa Hán Việt</span>
         <span style="color:var(--active-dark)">${pct}%</span>
       </div>
-      <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:var(--active);"></div></div>`;
+      <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:var(--active);"></div></div>
+      ${(data.invalidCount || data.missingCount) ? `<div style="font-size:.8rem;margin-top:8px;color:var(--muted)">${data.missingCount ? `Chưa có: <b>${data.missingCount}</b> chữ (${escapeHtml((data.missing || []).join(' '))}${data.missingCount > (data.missing || []).length ? ' …' : ''}). ` : ''}${data.invalidCount ? `Có dòng nhưng không dùng được: <b>${data.invalidCount}</b> chữ (${escapeHtml((data.invalid || []).join(' '))}${data.invalidCount > (data.invalid || []).length ? ' …' : ''}). ` : ''}Bấm "Chạy sinh chiết tự ngay" để sinh/sinh lại.</div>` : ''}`;
   } catch (e) {
     area.textContent = 'Không kết nối được máy chủ: ' + e.message;
   }
