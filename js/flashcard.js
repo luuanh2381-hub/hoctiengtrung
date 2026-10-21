@@ -127,30 +127,45 @@ async function loadHanziParts(attempt) {
 // Trước đây khối này bị cố định max-height:82px + cuộn trong (làm cho mặt sau flashcard) nên ở "Hôm nay học" chỉ thấy 1 dải bị cắt.
 // Giờ: không giới hạn chiều cao ở Hôm nay học / Trắc nghiệm; chỉ mặt sau flashcard (chiều cao cố định) mới cuộn, và cuộn cả khối chứ không cắt tiêu đề.
 // Tham số thứ 2 (expanded) giữ lại để tương thích chỗ gọi cũ; không còn ảnh hưởng bố cục.
-function renderHanziParts(hz, expanded) {
+// V119: tham số thứ 3 (compact) — dùng ở màn đáp án của Hôm nay học: chỉ hiện 1 dòng tóm tắt "扌tay + 辰 người quỷ · 辶đường + 首đầu"; chạm vào mới xổ ra đủ thẻ chi tiết.
+// Trạng thái mở/đóng nhớ trong hpCompactOpen để người học đã mở thì các thẻ sau vẫn mở.
+let hpCompactOpen = false;
+function hpShort(m) { // rút nghĩa dài thành cụm ngắn cho dòng tóm tắt: bỏ phần sau ( : ; , /
+  let s = String(m == null ? '' : m).split(/[(:;,\/]/)[0].trim();
+  if (!s) s = String(m == null ? '' : m).trim();
+  return s.length > 18 ? s.slice(0, 17).trim() + '…' : s;
+}
+function renderHanziParts(hz, expanded, compact) {
   const cjk = /[\u4e00-\u9fff]/;
   const esc = (typeof escapeHtml === 'function') ? escapeHtml : (t => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'));
   const comp = (c, m) => `<div class="hp-comp"><span class="hp-chip">${esc(c)}</span><span class="hp-mean">${esc(m)}</span></div>`;
   const card = (ch, body) => `<div class="hp-card"><div class="hp-char">${esc(ch)}</div><div class="hp-body">${body}</div></div>`;
+  const shorts = []; // mỗi chữ: phần tóm tắt 1 dòng (rỗng nếu chưa có dữ liệu)
   const rows = [...hz].map(ch => {
     // Ưu tiên dữ liệu từ database (AI sinh, phủ rộng hơn), fallback về từ điển nhỏ có sẵn trong code
     const dbEntry = dbHanziParts[ch];
     if (dbEntry) {
-      if (dbEntry.type === 'parts' && Array.isArray(dbEntry.items) && dbEntry.items.length) return card(ch, dbEntry.items.map(x => comp(x.c, x.m)).join(''));
-      if (dbEntry.type === 'note' && dbEntry.text) return card(ch, `<div class="hp-note">${esc(dbEntry.text)}</div>`);
+      if (dbEntry.type === 'parts' && Array.isArray(dbEntry.items) && dbEntry.items.length) { shorts.push({ ch, s: dbEntry.items.map(x => `<b>${esc(x.c)}</b>${esc(hpShort(x.m))}`).join(' + ') }); return card(ch, dbEntry.items.map(x => comp(x.c, x.m)).join('')); }
+      if (dbEntry.type === 'note' && dbEntry.text) { shorts.push({ ch, s: esc(hpShort(dbEntry.text)) }); return card(ch, `<div class="hp-note">${esc(dbEntry.text)}</div>`); }
     }
     const entry = HANZI_PARTS[ch];
-    if (entry) return card(ch, Array.isArray(entry) ? entry.map(([c, m]) => comp(c, m)).join('') : `<div class="hp-note">${esc(entry)}</div>`);
+    if (entry) { shorts.push({ ch, s: Array.isArray(entry) ? entry.map(([c, m]) => `<b>${esc(c)}</b>${esc(hpShort(m))}`).join(' + ') : esc(hpShort(entry)) }); return card(ch, Array.isArray(entry) ? entry.map(([c, m]) => comp(c, m)).join('') : `<div class="hp-note">${esc(entry)}</div>`); }
     // Chưa có dữ liệu — chỉ báo cho chữ Hán thật sự (bỏ qua số/chữ Latin lẫn trong từ)
     if (!cjk.test(ch)) return '';
     // V118.1: phân biệt 3 tình huống — đang/chưa tải xong, tải lỗi, và máy chủ thật sự chưa có chữ này.
     if (hanziPartsState !== 'ok' && !isGuest && authToken) {
       if (hanziPartsState === 'idle' || hanziPartsState === 'failed') loadHanziParts(); // thử lại ngầm, không chặn vẽ
+      shorts.push({ ch, s: '<i>đang tải…</i>' });
       return card(ch, '<div class="hp-note hp-empty">⏳ Đang tải chiết tự…</div>');
     }
+    shorts.push({ ch, s: '<i>chưa có</i>' });
     return card(ch, '<div class="hp-note hp-empty">Chưa có chiết tự cho chữ này</div>');
   }).join('');
   if (!rows) return '';
+  if (compact) {
+    const sum = shorts.map(x => `<span class="hp-sum-item"><span class="hp-sum-ch">${esc(x.ch)}</span> ${x.s}</span>`).join('<span class="hp-sum-sep">·</span>');
+    return `<details class="hp-wrap hp-compact"${hpCompactOpen ? ' open' : ''} ontoggle="hpCompactOpen=this.open" onclick="event.stopPropagation()"><summary class="hp-sum"><span class="hp-sum-ic">🧩</span><span class="hp-sum-txt">${sum}</span><span class="hp-sum-arrow">▾</span></summary>${rows}</details>`;
+  }
   return `<div class="hp-wrap" onclick="event.stopPropagation()"><div class="hp-title">🧩 Chiết tự · bộ thủ</div>${rows}</div>`;
 }
 

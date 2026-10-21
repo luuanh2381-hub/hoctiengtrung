@@ -709,7 +709,10 @@ function rvExplainHtml() {
       `${!blank && t.verdict === 'tone_mismatch' && AM.toneFeedback ? (() => { const f = AM.toneFeedback(t.value, q.correctKey); return f ? `<br>${escapeHtml(f)}` : ''; })() : ''}` + // V118: chỉ rõ âm tiết nào sai thanh
       `${t.correct ? '' : `<br>Đáp án chuẩn: ${escapeHtml(q.correctKey)}`}</div>`;
   }
-  return `<div class="rv-explain">${typedLine}${q.explanation.map(l => `<div>${escapeHtml(l)}</div>`).join('')}</div>`;
+  // V119: bỏ dòng "Bạn vừa nghe: …" (chữ, pinyin, nghĩa, Hán Việt đã hiện ngay phía trên nên lặp lại)
+  const lines = (q.explanation || []).filter(l => !/^Bạn vừa nghe:/.test(l));
+  if (!typedLine && !lines.length) return '';
+  return `<div class="rv-explain">${typedLine}${lines.map(l => `<div>${escapeHtml(l)}</div>`).join('')}</div>`;
 }
 
 function rvShowHV() { return typeof showHanViet === 'undefined' || !!showHanViet; } // V117: người học có thể ẩn Hán Việt (⚙️ Hiển thị / cài đặt khu vực học)
@@ -786,7 +789,7 @@ function rvCorrectionHtml(w, r) {
   const info = rvLeechInfo(w, r && r.card);
   const hz = escapeJsAttr(w.hz);
   if (!info.isLeech) {
-    return `<div class="rv-correct-tip">🔁 Sai rồi — nhìn kỹ chữ, đọc to một lần. Từ này sẽ được hỏi lại sau ${RV_CORRECTION_GAP} câu bằng dạng khác.</div>`;
+    return ''; // đã bỏ dòng nhắc "Sai rồi — nhìn kỹ chữ..." để màn đáp án gọn hơn (từ vẫn được hỏi lại như cũ)
   }
   const why = info.lapses >= RV_LEECH_LAPSES ? `đã quên ${info.lapses} lần theo lịch ôn` : `sai ${info.wrongNow} lần trong buổi này`;
   const tips = [
@@ -816,7 +819,7 @@ function rvIntroHtml(tagLabel, w) {
       <div class="rv-vi">${escapeHtml(w.vi || '')}</div>
       ${(w.hanviet && rvShowHV()) ? `<div class="rv-hv">Hán Việt: ${escapeHtml(w.hanviet)}</div>` : ''}
       ${audioOk ? `<button id="rv-play" class="btn btn-sound btn-sm" onclick="speak('${escapeJsAttr(w.hz)}')">🔊 Nghe</button>` : ''}
-      ${renderHanziParts(w.hz)}
+      ${renderHanziParts(w.hz, false, true)}
       ${ex ? `<div class="rv-ex">${escapeHtml(ex.zh)}<br><span style="color:var(--muted);font-size:.85rem;">${escapeHtml(ex.vi || '')}</span></div>` : ''}
       <div style="text-align:center;margin-top:14px"><button class="btn btn-primary" onclick="rvIntroDone()">Đã xem — kiểm tra ngay</button></div>`;
 }
@@ -996,7 +999,7 @@ function renderReview() {
       <div class="rv-py">${escapeHtml(w.py || '')}</div>
       ${showMeaning ? `<div class="rv-vi">${escapeHtml(w.vi || '')}</div>` : ''}
       ${(w.hanviet && rvShowHV()) ? `<div class="rv-hv">Hán Việt: ${escapeHtml(w.hanviet)}</div>` : ''}
-      ${renderHanziParts(w.hz)}
+      ${renderHanziParts(w.hz, false, true)}
       ${rvExplainHtml()}
       ${(exD && !(rvQuestion && rvQuestion.typeId === 'cloze')) ? `<div class="rv-ex">${escapeHtml(exD.zh)}<br><span style="color:var(--muted);font-size:.85rem;">${escapeHtml(exD.vi || '')}</span></div>` : ''}
       <div style="text-align:center;margin-top:12px"><button class="btn btn-primary" onclick="rvPracticeContinue()">Tiếp tục</button></div>`;
@@ -1019,7 +1022,7 @@ function renderReview() {
       <div class="rv-py">${w.py || ''}</div>
       ${showMeaning ? `<div class="rv-vi">${w.vi || ''}</div>` : ''}
       ${(w.hanviet && rvShowHV()) ? `<div class="rv-hv">Hán Việt: ${w.hanviet}</div>` : ''}
-      ${renderHanziParts(w.hz)}
+      ${renderHanziParts(w.hz, false, true)}
       ${rvExplainHtml()}
       ${r && !r.correct ? rvCorrectionHtml(w, r) : ''}
       ${(ex && !(rvQuestion && rvQuestion.typeId === 'cloze')) ? `<div class="rv-ex">${ex.zh}<br><span style="color:var(--muted);font-size:.85rem;">${ex.vi}</span></div>` : ''}
@@ -1047,7 +1050,7 @@ function renderReview() {
   const counter = parts.join('');
   const headAct = (typeof swHeadActionsHtml === 'function') ? swHeadActionsHtml() : '';
   return `
-    <div class="rv-card" data-phase="${rvPhase}" data-q="${rvPhase === 'match' ? 'match' : (rvQuestion ? rvQuestion.typeId : '')}" data-kind="${(rvPhase === 'question' && rvQuestion && rvQuestion.prompt) ? rvQuestion.prompt.kind : ''}"><div class="rv-head"><div class="rv-counter rv-counter-line" role="status" aria-live="polite">${counter}</div><div class="rv-head-act">${headAct}</div></div><div class="rv-body">${body}</div></div>
+    <div class="rv-card" data-phase="${rvPhase}" data-ans="${(rvPhase === 'intro' || rvPhase === 'match' || rvPhase === 'question') ? '' : '1'}" data-q="${rvPhase === 'match' ? 'match' : (rvQuestion ? rvQuestion.typeId : '')}" data-kind="${(rvPhase === 'question' && rvQuestion && rvQuestion.prompt) ? rvQuestion.prompt.kind : ''}"><div class="rv-head"><div class="rv-counter rv-counter-line" role="status" aria-live="polite">${counter}</div><div class="rv-head-act">${headAct}</div></div><div class="rv-body">${body}</div></div>
   `;
 }
 
