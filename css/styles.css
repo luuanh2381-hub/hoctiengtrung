@@ -293,14 +293,19 @@
   .btn-fail:active{transform:translateY(2px);box-shadow:0 1px 0 var(--l10a);}
   .btn-sound{background:var(--l9b);color:var(--l9a);padding:9px 15px;}
   .fc-counter{text-align:center;font-size:.78rem;color:var(--muted);margin-bottom:12px;font-weight:700;}
-  .fc-parts-wrap{width:100%;max-height:82px;overflow-y:auto;padding:6px 16px;box-sizing:border-box;}
-  .fc-parts-wrap.qz-parts{max-height:none;overflow-y:visible;padding:12px 6px 4px;}
-  .fc-parts-title{font-size:.66rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
-  .fc-parts-row{margin-bottom:7px;font-size:.76rem;line-height:1.55;}
-  .fc-parts-char{display:inline-block;font-weight:900;font-size:1.05rem;color:var(--active-dark);margin-right:5px;}
-  .fc-parts-comps{color:var(--ink);}
-  .fc-parts-chip{display:inline-block;background:var(--paper);border-radius:6px;padding:1px 7px;margin:1px 3px 1px 0;font-weight:700;white-space:nowrap;}
-  .fc-parts-note{color:var(--muted);font-style:italic;}
+  /* V118.3 chiết tự: thẻ theo từng chữ; không giới hạn chiều cao (trừ mặt sau flashcard có chiều cao cố định) */
+  .hp-wrap{width:100%;max-width:520px;margin:12px auto 2px;padding:0 4px;box-sizing:border-box;text-align:left;}
+  .hp-title{font-size:.72rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:0 2px 8px;text-align:center;}
+  .hp-card{display:flex;gap:12px;align-items:flex-start;background:var(--paper);border-radius:14px;padding:10px 12px;margin-bottom:8px;}
+  .hp-char{flex:0 0 auto;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:900;line-height:1;color:var(--active-dark);background:var(--card);border-radius:12px;}
+  .hp-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px;padding-top:2px;}
+  .hp-comp{display:flex;gap:9px;align-items:flex-start;}
+  .hp-chip{flex:0 0 auto;min-width:32px;text-align:center;background:var(--card);border-radius:8px;padding:1px 7px;font-size:1.2rem;font-weight:800;line-height:1.35;color:var(--ink);}
+  .hp-mean{flex:1;min-width:0;font-size:.9rem;line-height:1.45;color:var(--ink);overflow-wrap:anywhere;padding-top:3px;}
+  .hp-note{font-size:.9rem;line-height:1.45;color:var(--muted);font-style:italic;overflow-wrap:anywhere;padding-top:3px;}
+  .hp-empty{opacity:.7;}
+  .fc-back .hp-wrap{max-height:min(230px,36vh);overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:8px;}
+  .fc-back .hp-title{position:sticky;top:0;background:var(--card);padding:2px 0 6px;margin-bottom:2px;}
 
   /* ── HÔM NAY HỌC (FSRS dashboard) ─────────────────────────── */
   .study-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
