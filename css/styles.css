@@ -683,3 +683,47 @@ body.sw-on[data-sw-layout="max-space"]:has(.rv-head) .rv-card{min-height:calc(va
 /* Bảng cài đặt ở 2 chế độ này nổi lên trên cùng (không còn thanh điều khiển để bám) */
 body.sw-on[data-sw-layout="focus"] .sw-panel,body.sw-on[data-sw-layout="max-space"] .sw-panel{position:fixed;top:max(8px,env(safe-area-inset-top));left:8px;right:8px;margin:0 auto;z-index:200;max-height:calc(var(--sw-vh,100dvh) - 24px)}
 body.sw-on .rv-card>.rv-head{max-width:none !important;width:100%}
+
+/* ── Màn ĐÁP ÁN (sau khi trả lời): gọn để vừa 1 màn hình điện thoại, nút Tiếp tục luôn nằm cố định ở đáy ── */
+.rv-card[data-ans="1"]{padding:10px 12px 0;min-height:0}
+.rv-card[data-ans="1"]>.rv-body{justify-content:flex-start;gap:5px}
+.rv-card[data-ans="1"] .rv-tag{display:none}
+.rv-card[data-ans="1"] .rv-hz{font-size:min(2.8rem,13vw);line-height:1.1}
+body.sw-on .rv-card[data-ans="1"] .rv-hz,body.sw-on[data-sw-layout] .rv-card[data-ans="1"] .rv-hz{font-size:calc(min(2.8rem,13vw) * var(--sw-hz,1))}
+.rv-card[data-ans="1"] .rv-feedback{font-size:.9rem;line-height:1.2}
+.rv-card[data-ans="1"] .rv-py{font-size:1.05rem;line-height:1.2}
+.rv-card[data-ans="1"] .rv-vi{font-size:1.15rem;line-height:1.3}
+.rv-card[data-ans="1"] .rv-hv{font-size:.85rem}
+.rv-card[data-ans="1"] .rv-explain{font-size:.78rem;line-height:1.4;padding:6px 10px;margin:2px 0;width:100%;box-sizing:border-box}
+.rv-card[data-ans="1"] .rv-ex{font-size:.85rem;padding:6px 10px;margin-top:0;width:100%;box-sizing:border-box}
+.rv-card[data-ans="1"] .hp-wrap{margin:4px auto 0}
+.rv-card[data-ans="1"] .hp-title{margin:0 0 4px;font-size:.66rem}
+.rv-card[data-ans="1"] .hp-card{gap:8px;padding:5px 8px;margin-bottom:4px;border-radius:12px}
+.rv-card[data-ans="1"] .hp-char{width:36px;height:36px;font-size:1.4rem;border-radius:10px}
+.rv-card[data-ans="1"] .hp-body{gap:3px;padding-top:0}
+.rv-card[data-ans="1"] .hp-chip{min-width:26px;font-size:1rem;padding:0 5px;line-height:1.3}
+.rv-card[data-ans="1"] .hp-mean,.rv-card[data-ans="1"] .hp-note{font-size:.8rem;line-height:1.3;padding-top:1px}
+.rv-card[data-ans="1"] .rv-leech{font-size:.82rem;padding:8px 10px;margin:2px 0}
+.rv-card[data-ans="1"] .rv-saved-line{margin-top:2px}
+/* Thanh đánh giá dính đáy khung nhìn: không bao giờ bị che dù nội dung dài */
+.rv-card[data-ans="1"] .rv-rating-wrap{position:sticky;bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:20;margin-top:6px;padding:6px 0 8px;background:var(--card);box-shadow:0 -8px 8px -6px var(--card)}
+body.sw-on[data-sw-layout="focus"] .rv-card[data-ans="1"] .rv-rating-wrap,body.sw-on[data-sw-layout="max-space"] .rv-card[data-ans="1"] .rv-rating-wrap{bottom:env(safe-area-inset-bottom,0px)}
+.rv-card[data-ans="1"] .rv-rating-hint{font-size:.74rem;margin-bottom:5px;min-height:0}
+.rv-card[data-ans="1"] .rv-rate-btn{min-height:44px;padding:9px 4px}
+@media (hover:none){.rv-card[data-ans="1"] .kbd-hint{display:none}}
+
+/* V119: chiết tự dạng thu gọn (1 dòng tóm tắt, chạm để xổ chi tiết) */
+.rv-card .hp-compact{border-radius:12px;background:var(--paper);padding:0}
+.rv-card .hp-compact>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:7px 10px;-webkit-tap-highlight-color:transparent}
+.rv-card .hp-compact>summary::-webkit-details-marker{display:none}
+.rv-card .hp-sum-ic{flex:0 0 auto;font-size:.95rem}
+.rv-card .hp-sum-txt{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:2px 6px;justify-content:center;font-size:.8rem;line-height:1.35;color:var(--ink);text-align:center}
+.rv-card .hp-sum-item b{font-size:.95rem;font-weight:800;margin-right:2px}
+.rv-card .hp-sum-ch{font-weight:900;font-size:.95rem;color:var(--active-dark)}
+.rv-card .hp-sum-sep{color:var(--muted)}
+.rv-card .hp-sum-arrow{flex:0 0 auto;color:var(--muted);font-size:.8rem;transition:transform .2s}
+.rv-card .hp-compact[open]>summary .hp-sum-arrow{transform:rotate(180deg)}
+.rv-card .hp-compact[open]>summary{padding-bottom:4px}
+.rv-card .hp-compact>.hp-card{margin:0 6px 6px;background:var(--card)}
+.rv-card .hp-compact>.hp-card .hp-char{background:var(--paper)}
+.rv-card .hp-compact>.hp-card .hp-chip{background:var(--paper)}
