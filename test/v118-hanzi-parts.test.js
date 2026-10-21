@@ -35,6 +35,27 @@ test('client (flashcard.js): parts dạng chuỗi JSON được giải mã; dòn
   const h = vm.runInContext("renderHanziParts('造村')", ctx);
   assert.ok(h.includes('xuoc + cao')); assert.ok(h.includes('Chưa có chiết tự')); assert.ok(!h.includes('chờ AI'));
 });
+test('V118.3 bố cục mới (dữ liệu như ảnh 传来): mỗi chữ 1 thẻ, mỗi thành phần 1 dòng, có tiêu đề, escape HTML', async () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'js/flashcard.js'), 'utf8');
+  const code = src.slice(src.indexOf('let dbHanziParts'), src.indexOf('function fcUpdate'));
+  const ctx = { isGuest: false, authToken: 't', authHeaders: () => ({}), HANZI_PARTS: {}, setTimeout: () => 0, console,
+    fetch: async () => ({ ok: true, status: 200, json: async () => ({ ok: true, parts: [
+      { hz: '传', parts: { type: 'note', text: '(chuyên môn/tập trung), đóng vai trò biểu âm' } },
+      { hz: '来', parts: { type: 'parts', items: [{ c: '木', m: 'Hình ảnh cây lúa mì nguyên bản' }, { c: '丷', m: 'Hai hạt lúa mì <b>x</b>' }] } }] }) }) };
+  vm.createContext(ctx); vm.runInContext(code, ctx); await vm.runInContext('loadHanziParts()', ctx);
+  const h = vm.runInContext("renderHanziParts('传来')", ctx);
+  assert.strictEqual((h.match(/class="hp-card"/g) || []).length, 2, 'mỗi chữ một thẻ');
+  assert.strictEqual((h.match(/class="hp-comp"/g) || []).length, 2, 'mỗi thành phần một dòng');
+  assert.ok(h.includes('Chiết tự') && h.includes('>传<') && h.includes('>来<') && h.includes('>木<'), 'có tiêu đề và đủ cả 2 chữ');
+  assert.ok(h.includes('đóng vai trò biểu âm') && h.includes('Hình ảnh cây lúa mì nguyên bản'));
+  assert.ok(!h.includes('<b>x</b>') && h.includes('&lt;b&gt;'), 'nội dung AI phải được escape');
+});
+test('V118.3 CSS: khối chiết tự không còn bị khoá 82px; chỉ mặt sau flashcard có giới hạn + cuộn', () => {
+  const c = fs.readFileSync(path.join(__dirname, '..', 'css/styles.css'), 'utf8');
+  assert.ok(!/max-height:82px/.test(c) && !/\.fc-parts-/.test(c));
+  const base = c.match(/\.hp-wrap\{[^}]*\}/)[0]; assert.ok(!/max-height|overflow/.test(base), base);
+  assert.ok(/\.fc-back \.hp-wrap\{[^}]*max-height[^}]*overflow-y:auto/.test(c));
+});
 test('server: /api/hanzi-parts chỉ gửi dòng đã chuẩn hoá; progress/generate dùng auditParts; có xoá dòng hỏng trước khi sinh lại', () => {
   const s = fs.readFileSync(path.join(__dirname, '..', 'api/index.js'), 'utf8');
   assert.ok(/getAllHanziParts\(\)\)\.map\(r => \(\{ hz: r\.hz, parts: normalizeParts/.test(s));
