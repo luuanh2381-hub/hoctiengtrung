@@ -789,7 +789,7 @@ function rvCorrectionHtml(w, r) {
   const info = rvLeechInfo(w, r && r.card);
   const hz = escapeJsAttr(w.hz);
   if (!info.isLeech) {
-    return ''; // đã bỏ dòng nhắc "Sai rồi — nhìn kỹ chữ..." để màn đáp án gọn hơn (từ vẫn được hỏi lại như cũ)
+    return ''; // V119: không hiện dòng nhắc cho từ thường để màn đáp án gọn (từ vẫn được hỏi lại như cũ)
   }
   const why = info.lapses >= RV_LEECH_LAPSES ? `đã quên ${info.lapses} lần theo lịch ôn` : `sai ${info.wrongNow} lần trong buổi này`;
   const tips = [
