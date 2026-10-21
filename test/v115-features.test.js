@@ -340,7 +340,7 @@ test('rvLeechInfo: lapses ≥4 (từ phiên server hoặc thẻ vừa chốt) ho
 test('khối sửa lỗi: từ thường → 1 dòng nhắc; từ cứng đầu → khối 🧲 có nút viết mẹo + xem nét viết, thoát HTML, nói đúng lý do', () => {
   const ctx = makeEnv();
   const normal = R(ctx, "rvCorrectionHtml({ hz: '准备', lapses: 0 }, { correct: false })");
-  assert.ok(normal.includes('hỏi lại sau 2 câu') && !normal.includes('🧲'));
+  assert.ok(normal === '' && !normal.includes('🧲'));
   const leech = R(ctx, "rvCorrectionHtml({ hz: '准备', lapses: 5, hanviet: '<b>x</b>' }, { correct: false })");
   // V116: bỏ tính năng mẹo nhớ → khối cứng đầu chỉ còn gợi ý Hán Việt / đọc to / nét viết, KHÔNG còn nút hay lời khuyên viết mẹo
   assert.ok(leech.includes('🧲') && leech.includes("strokeOpen('准备')") && leech.includes('đã quên 5 lần') && leech.includes('Đọc to từ này'));

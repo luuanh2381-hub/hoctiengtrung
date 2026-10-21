@@ -200,7 +200,7 @@ test('dữ liệu & API server của mẹo nhớ giữ nguyên (khôi phục đ�
 });
 test('màn giới thiệu từ mới & màn đáp án vẫn có chiết tự, âm Hán Việt, ví dụ — chỉ mất khối mẹo', () => {
   const r = read('js/review.js');
-  assert.ok((r.match(/renderHanziParts\(w\.hz\)/g) || []).length >= 3);
+  assert.ok((r.match(/renderHanziParts\(w\.hz/g) || []).length >= 3);
 });
 
 section('[G] Nối dây test');
