@@ -12,3 +12,12 @@ CREATE TABLE IF NOT EXISTS ai_explain_usage (
   n       INT NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, day)
 );
+-- V119.1: Thư viện AI theo từng người (mỗi người 1 dòng cho mỗi từ đã xem giải thích)
+CREATE TABLE IF NOT EXISTS ai_explain_user (
+  user_id    TEXT NOT NULL,
+  hz         TEXT NOT NULL,
+  cache_key  TEXT NOT NULL,
+  saved_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, hz)
+);
