@@ -555,6 +555,42 @@
     #content{max-width:780px;}
   }
 
+/* V119.1: tab "🤖 Thư viện AI" (js/ai-bank.js) */
+.aib-head{margin-bottom:12px}
+.aib-title{font-size:1.1rem;font-weight:900}
+.aib-sub{font-size:.82rem;color:var(--muted);margin:4px 0 10px;line-height:1.4}
+.aib-search{width:100%;box-sizing:border-box;border:2px solid var(--border,#e5e5e5);border-radius:12px;padding:10px 12px;font-size:.95rem;background:var(--card,#fff);color:var(--ink)}
+.aib-count{font-size:.75rem;color:var(--muted);margin-top:6px;min-height:1em}
+.aib-empty{text-align:center;color:var(--muted);font-size:.88rem;line-height:1.5;padding:22px 12px;border:2px dashed var(--border,#e5e5e5);border-radius:14px}
+.aib-err{color:var(--l10a,#c0392b)}
+.aib-item{border:2px solid var(--border,#e5e5e5);border-radius:14px;background:var(--card,#fff);margin-bottom:8px;overflow:hidden}
+.aib-item>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:10px 12px;-webkit-tap-highlight-color:transparent}
+.aib-item>summary::-webkit-details-marker{display:none}
+.aib-hz{font-size:1.5rem;font-weight:900;min-width:2.2em}
+.aib-meta{flex:1;min-width:0;display:flex;flex-direction:column}
+.aib-pyv{font-size:.8rem;color:var(--muted);font-style:italic}
+.aib-viv{font-size:.92rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aib-date{font-size:.7rem;color:var(--muted)}
+.aib-item>summary::after{content:"▾";color:var(--muted);transition:transform .2s}
+.aib-item[open]>summary::after{transform:rotate(180deg)}
+.aib-body{padding:0 12px 10px;border-top:1px dashed var(--border,#e5e5e5)}
+.aib-hv{font-size:.8rem;color:var(--active-dark,#3f9e00);font-weight:800;margin:8px 0 2px}
+.aib-sec{font-size:.88rem;line-height:1.45;margin:4px 0}
+.aib-sec b{color:var(--active-dark,#1899d6)}
+.aib-mn{background:var(--active-bg,#fff8e1);border-radius:10px;padding:6px 9px}
+.aib-chk{font-size:.84rem;color:var(--muted)}
+.aib-chk span{font-size:.8rem}
+.aib-exs{margin:6px 0}
+.aib-ex{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px dashed var(--border,#e5e5e5)}
+.aib-spk{flex:0 0 auto;border:none;background:var(--paper,#f4f4f4);border-radius:50%;width:32px;height:32px;cursor:pointer}
+.aib-zh{font-size:1.05rem;font-weight:700;line-height:1.35}
+.aib-py{font-size:.8rem;color:var(--muted);font-style:italic}
+.aib-vi{font-size:.84rem;line-height:1.35}
+.aib-actions{text-align:right;margin-top:6px}
+.aib-wait{color:var(--muted)}
+.aib-link{border:none;background:none;color:var(--active-dark,#1899d6);font-weight:800;cursor:pointer;padding:0 4px}
+.aib-del{border:none;background:none;color:var(--l10a,#c0392b);font-weight:800;font-size:.8rem;cursor:pointer;padding:6px 0}
+
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
    V117 — STUDY WORKSPACE (màn "Hôm nay học").
    MỌI quy tắc dưới đây bắt đầu bằng `body.sw-on` — class này CHỈ được đặt khi đang ở tab 'review'
@@ -768,3 +804,5 @@ body.sw-on[data-sw-layout="focus"] .rv-card[data-ans="1"] .rv-rating-wrap,body.s
 .rv-card .ai-ex-full{font-weight:600;color:var(--ink);margin-top:3px;line-height:1.4}
 .rv-card .ai-ex-full span{font-weight:500;color:var(--muted);font-size:.82rem}
 .rv-card .ai-ex-link{border:none;background:none;color:var(--active-dark,#1899d6);font-weight:800;font-size:.82rem;cursor:pointer;padding:4px 0}
+
+.rv-card .ai-ex-saved{font-size:.74rem;color:var(--muted);text-align:center;margin-top:8px;line-height:1.35}
