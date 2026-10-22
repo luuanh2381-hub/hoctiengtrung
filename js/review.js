@@ -631,7 +631,7 @@ async function rvCommitRating(attemptId, chosenRating) {
   }).then(data => {
     if (attemptId !== rvAttemptId || currentTab !== 'review') return;
     if (data && data.ok) {
-      rvLastAnswer = { correct: data.answerCorrect, card: data.card, autoRating: data.debug ? data.debug.autoRating : null };
+      rvLastAnswer = { correct: data.answerCorrect, card: data.card, autoRating: data.debug ? data.debug.autoRating : null, chosen: rvLastAnswer && rvLastAnswer.chosen };
       if (data.rating) rvFinalRating = data.rating; // server luôn là nguồn sự thật cuối (Phần 20)
     }
     rvRatingPhase = 'done';
@@ -804,6 +804,11 @@ function rvCorrectionHtml(w, r) {
     <div class="rv-leech-actions">
       <button class="btn btn-sm" onclick="strokeOpen('${hz}')">✏️ Xem nét viết</button>
     </div></div>`;
+}
+// V119: nút "🤖 Hỏi AI" ở câu SAI (xem js/ai-explain.js). Rỗng nếu đúng / chưa đăng nhập / module chưa nạp.
+function rvAiHtml(w, r) {
+  if (!r || r.correct || typeof aiExBlockHtml !== 'function') return '';
+  return aiExBlockHtml(w, { typeId: rvQuestion && rvQuestion.typeId, chosen: r.chosen });
 }
 // V115: học riêng các từ cứng đầu (lọc từ danh sách "hay quên" của server theo số lần quên thật).
 function startLeechSession() { rvLeechOnly = true; rvLeechMode = true; return startStudySession(true, true); }
@@ -1001,6 +1006,7 @@ function renderReview() {
       ${(w.hanviet && rvShowHV()) ? `<div class="rv-hv">Hán Việt: ${escapeHtml(w.hanviet)}</div>` : ''}
       ${renderHanziParts(w.hz, false, true)}
       ${rvExplainHtml()}
+      ${rvAiHtml(w, r)}
       ${(exD && !(rvQuestion && rvQuestion.typeId === 'cloze')) ? `<div class="rv-ex">${escapeHtml(exD.zh)}<br><span style="color:var(--muted);font-size:.85rem;">${escapeHtml(exD.vi || '')}</span></div>` : ''}
       <div style="text-align:center;margin-top:12px"><button class="btn btn-primary" onclick="rvPracticeContinue()">Tiếp tục</button></div>`;
   } else {
@@ -1025,6 +1031,7 @@ function renderReview() {
       ${renderHanziParts(w.hz, false, true)}
       ${rvExplainHtml()}
       ${r && !r.correct ? rvCorrectionHtml(w, r) : ''}
+      ${rvAiHtml(w, r)}
       ${(ex && !(rvQuestion && rvQuestion.typeId === 'cloze')) ? `<div class="rv-ex">${ex.zh}<br><span style="color:var(--muted);font-size:.85rem;">${ex.vi}</span></div>` : ''}
       ${rvRenderRatingBar()}
       ${savedLine}
@@ -1113,7 +1120,7 @@ async function rvPick(btn) {
   if (typeof swSpeakAfterAnswer === 'function') swSpeakAfterAnswer(w.hz); else speak(w.hz); // V117: tôn trọng cài đặt "Tự phát âm"
   rvRecordAnswer(item, rvQuestion, isCorrectLocally, responseTimeMs, true);
 
-  rvLastAnswer = { correct: isCorrectLocally, card: null, autoRating: null };
+  rvLastAnswer = { correct: isCorrectLocally, card: null, autoRating: null, chosen: selectedAnswer };
   rvPhase = 'answered';
   // Bổ sung "Highlight System Rating": KHÔNG commit thẳng lên FSRS — trước tiên hỏi server gợi ý System
   // Rating (chỉ đọc), rồi hiện 4 nút Again/Hard/Good/Easy + countdown cho user xác nhận.
@@ -1149,7 +1156,7 @@ function rvPickPractice(btn) {
   });
   if (ok) playDing(); else playBuzz();
   if (typeof swSpeakAfterAnswer === 'function') swSpeakAfterAnswer(w.hz); else speak(w.hz); // V117: tôn trọng cài đặt "Tự phát âm"
-  rvLastAnswer = { correct: ok, card: null, autoRating: null };
+  rvLastAnswer = { correct: ok, card: null, autoRating: null, chosen: btn.dataset.v };
   rvRatingPhase = null;
   rvRecordAnswer(item, q, ok, responseTimeMs, false);
   submitSkillPractice({ word: w, exerciseType: q.exercisePractice, selectedAnswer: btn.dataset.v, responseTimeMs, source: rvPracticeSource(item), sessionId: rvQueue.sessionId }).catch(() => {});
@@ -1188,7 +1195,7 @@ async function rvSubmitTyped(skip) {
   if (graded.correct) playDing(); else playBuzz();
   if (typeof swSpeakAfterAnswer === 'function') swSpeakAfterAnswer(w.hz); else speak(w.hz); // V117: tôn trọng cài đặt "Tự phát âm"
   rvRecordAnswer(item, q, graded.correct, responseTimeMs, rvIsOfficial(item));
-  rvLastAnswer = { correct: graded.correct, card: null, autoRating: null, typed: { value: skip ? '' : String(value).trim(), verdict: graded.verdict, correct: graded.correct } };
+  rvLastAnswer = { correct: graded.correct, card: null, autoRating: null, chosen: skip ? '' : String(value).trim(), typed: { value: skip ? '' : String(value).trim(), verdict: graded.verdict, correct: graded.correct } };
   rvPhase = 'answered';
   rvSubmitting = false;
 
