@@ -26,6 +26,7 @@ const { getFsrsVerificationInfo } = require('../lib/fsrs');
 const reviewService = require('../lib/fsrs/reviewService');
 const skillStore = require('../lib/skill-store');
 const wordNotes = require('../lib/word-notes');
+const aiExplain = require('../lib/ai-explain'); // V119: "🤖 Hỏi AI" ở câu sai
 const orphans = require('../lib/orphans');
 const { resolveExercise, isCountableAnswer, MEASURABLE_SKILLS, gradeAnswer, PRACTICE_SOURCES, cleanExposure } = require('../lib/skills');
 const skillRecommend = require('../lib/skill-recommend');
@@ -2860,6 +2861,68 @@ app.get('/api/word-examples', async (req, res) => {
     res.set('Cache-Control', 'private, max-age=60');
     res.json({ ok: true, examples });
   } catch (e) { fail(res, e); }
+});
+
+// ════════════════════════════════════════════════════
+// V119 — "🤖 HỎI AI" ở câu SAI (Hôm nay học): AI giải thích từ + sinh thêm ví dụ + câu tự kiểm tra.
+//   mode "explain": giải thích đầy đủ — CACHE theo (từ + từ hay nhầm), cache trúng thì KHÔNG tốn lượt, không gọi Gemini.
+//   mode "more"   : sinh thêm ví dụ khác (luôn gọi AI, tốn 1 lượt) — cộng dồn vào cache và vào kho ví dụ word_examples.
+// Giới hạn AI_EXPLAIN_DAILY_LIMIT lượt/người/ngày (mặc định 20). Lỗi AI → hoàn lại lượt. Chỉ người đã đăng nhập.
+// ════════════════════════════════════════════════════
+app.post('/api/ai/explain', async (req, res) => {
+  const authed = await requireAuth(req, res);
+  if (!authed) return;
+  const user = authed.username;
+  const body = req.body || {};
+  if (!aiExplain.isValidHz(body.hz)) return res.status(400).json({ ok: false, error: 'Từ không hợp lệ' });
+  const mode = body.mode === 'more' ? 'more' : 'explain';
+  const limit = aiExplain.dailyLimit();
+  let charged = false;
+  try {
+    const word = await aiExplain.findWord(body.hz);
+    if (!word) return res.status(404).json({ ok: false, error: 'Không tìm thấy từ này trong giáo trình' });
+    const chosen = aiExplain.cleanText(body.chosen, aiExplain.MAX_CHOSEN_LEN);
+    const confusion = chosen ? await aiExplain.findConfusion(chosen, word.hz) : null;
+    const key = aiExplain.cacheKey(word.hz, confusion && confusion.hz);
+    const cached = await aiExplain.getCached(key);
+
+    if (mode === 'explain' && cached) {
+      const used = await aiExplain.getUsed(user);
+      return res.json({ ok: true, cached: true, data: cached, newExamples: [], used, limit, remaining: Math.max(0, limit - used) });
+    }
+
+    const q = await aiExplain.takeQuota(user, limit);
+    if (!q.ok) {
+      return res.status(429).json({ ok: false, error: `Hôm nay bạn đã dùng hết ${limit} lượt hỏi AI. Ngày mai thử lại nhé!`, used: limit, limit, remaining: 0 });
+    }
+    charged = true;
+    const knownHz = await aiExplain.sampleKnownHz(word.l, 40).catch(() => []);
+    let data, newExamples;
+    if (mode === 'explain') {
+      const text = await callGemini(aiExplain.buildExplainPrompt({ word, typeId: body.typeId, chosen, confusion, knownHz }));
+      const v = aiExplain.validateExplain(aiExplain.parseJsonLoose(text), word, []);
+      if (!v.ok) throw new PublicError(v.error + '. Bấm thử lại nhé.');
+      data = v.data; newExamples = data.examples;
+      await aiExplain.saveCached(key, word.hz, data);
+    } else {
+      const existingZh = cached ? (cached.examples || []).map(e => e.zh) : [];
+      const text = await callGemini(aiExplain.buildMorePrompt({ word, existingZh, knownHz }));
+      const raw = aiExplain.parseJsonLoose(text);
+      newExamples = aiExplain.validateExamples(raw && raw.examples, word.hz, existingZh);
+      if (!newExamples.length) throw new PublicError('AI chưa sinh được ví dụ mới hợp lệ. Bấm thử lại nhé.');
+      data = cached ? aiExplain.mergeExamples(cached, newExamples) : null;
+      if (data) await aiExplain.saveCached(key, word.hz, data);
+    }
+    // Đưa ví dụ vào kho chung để dùng lại ở câu điền chỗ trống / ví dụ màn đáp án (lỗi ở bước này không làm hỏng kết quả).
+    await aiExplain.addToExamplePool(word.hz, word.l, newExamples).catch((e) => console.error('⚠️  Không lưu ví dụ AI vào kho:', e && e.message));
+    logActivity(user, authed.db.users[user] && authed.db.users[user].role, 'ai-explain', `${mode === 'more' ? 'Ví dụ khác' : 'Giải thích'}: ${word.hz}`);
+    res.json({ ok: true, cached: false, data, newExamples, used: q.used, limit, remaining: Math.max(0, limit - q.used) });
+  } catch (e) {
+    if (charged) await aiExplain.refundQuota(user).catch(() => {}); // AI lỗi → không mất lượt của người học
+    if (e instanceof PublicError) return fail(res, e);
+    if (isQuotaGeminiError(e && e.message)) return fail(res, e, 'AI đang hết lượt trong phút này. Đợi khoảng 1 phút rồi bấm thử lại nhé.');
+    fail(res, e, 'Không gọi được AI lúc này. Thử lại sau ít phút nhé.');
+  }
 });
 
 // ── [ADMIN] Tiến độ sinh ví dụ theo từ — bao nhiêu từ đã đủ ví dụ / tổng số từ ──
