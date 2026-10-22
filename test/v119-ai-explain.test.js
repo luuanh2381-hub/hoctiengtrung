@@ -76,9 +76,9 @@ test('mergeExamples: cộng dồn nhưng chỉ giữ tối đa 12 câu mới nh�
 });
 
 // ───────── route /api/ai/explain (trích từ api/index.js, chạy trong vm với DB/Gemini giả) ─────────
-function extractRoute() {
+function extractRoute(routeStart) {
   const src = read('api/index.js');
-  const start = src.indexOf("app.post('/api/ai/explain'");
+  const start = src.indexOf(routeStart || "app.post('/api/ai/explain'");
   assert.ok(start > 0, 'không thấy route');
   const open = src.indexOf('async (req, res) => {', start) + 'async (req, res) '.length;
   let depth = 0, i = open;
@@ -86,7 +86,8 @@ function extractRoute() {
   return '(async (req, res) ' + src.slice(open, i + 1) + ')';
 }
 function makeEnv(opts = {}) {
-  const calls = { gemini: 0, prompts: [], takeQuota: 0, refund: 0, saved: {}, pool: [] };
+  const role = opts.role || 'admin';
+  const calls = { gemini: 0, prompts: [], takeQuota: 0, refund: 0, saved: {}, pool: [], remembered: [], removed: [] }; const library = {};
   const cache = { ...(opts.cache || {}) }; let used = opts.used || 0; const limit = opts.limit || 20;
   class PublicError extends Error {}
   const fake = {
@@ -95,7 +96,15 @@ function makeEnv(opts = {}) {
     findWord: async (hz) => (hz === WORD.hz ? WORD : null),
     findConfusion: async (c) => (c === '检查' ? { hz: '检查', py: 'jiǎnchá', vi: 'kiểm tra' } : null),
     sampleKnownHz: async () => ['我们'],
-    getCached: async (k) => cache[k] || null,
+    getCachedBest: async (hz, k) => { // giống SQL thật: đúng khoá → bản chung của từ → bất kỳ bản nào của từ
+      const keys = Object.keys(cache).filter(x => x.split('|')[0] === hz);
+      const pick = keys.includes(k) ? k : keys.includes(hz + '|') ? hz + '|' : keys[0];
+      return pick ? { cache_key: pick, payload: cache[pick] } : null;
+    },
+    rememberForUser: async (u, hz, k) => { calls.remembered.push([u, hz, k]); library[hz] = k; },
+    listLibrary: async () => Object.keys(library).map(hz => ({ hz, py: 'p', vi: 'v', hanviet: '', meaning: String((cache[library[hz]] || {}).meaning || '').slice(0, 120), updatedAt: '2026-10-22T00:00:00Z' })),
+    getLibraryItem: async (u, hz) => (hz in library ? { hz, py: 'p', vi: 'v', hanviet: '', updatedAt: '2026-10-22T00:00:00Z', data: cache[library[hz]] } : null),
+    removeFromLibrary: async (u, hz) => { const had = hz in library; delete library[hz]; calls.removed.push([u, hz]); return had ? 1 : 0; },
     saveCached: async (k, hz, payload) => { cache[k] = payload; calls.saved[k] = payload; },
     takeQuota: async () => { calls.takeQuota++; if (used >= limit) return { ok: false, used }; used++; return { ok: true, used }; },
     refundQuota: async () => { calls.refund++; used--; },
@@ -104,7 +113,8 @@ function makeEnv(opts = {}) {
   };
   const ctx = {
     aiExplain: fake, PublicError, console,
-    requireAuth: async () => ({ username: 'u1', db: { users: { u1: { role: 'user' } } } }),
+    requireAuth: async () => ({ username: 'u1', db: { users: { u1: { role } } } }),
+    requireAdmin: (user, res) => { if (!user || (user.role !== 'admin' && user.role !== 'superadmin')) { res.status(403).json({ ok: false, error: 'Chỉ quản trị viên mới dùng được chức năng này' }); return false; } return true; },
     logActivity() {},
     callGemini: async (prompt) => { calls.gemini++; calls.prompts.push(prompt); if (opts.geminiThrows) throw new Error(opts.geminiThrows); return typeof opts.geminiOut === 'function' ? opts.geminiOut(calls.gemini) : (opts.geminiOut || JSON.stringify(GOOD)); },
     isQuotaGeminiError: (m) => /quota|429/i.test(m || ''),
@@ -112,13 +122,18 @@ function makeEnv(opts = {}) {
   };
   vm.createContext(ctx);
   const handler = vm.runInContext(extractRoute(), ctx);
-  const call = async (body) => {
-    const out = { status: 200, body: null };
-    const res = { status(s) { out.status = s; return this; }, json(b) { out.body = b; return this; } };
-    await handler({ body }, res);
+  const mk = (h) => async (body) => {
+    const out = { status: 200, body: null, headers: {} };
+    const res = { status(s) { out.status = s; return this; }, json(b) { out.body = b; return this; }, set(k, v) { out.headers[k] = v; return this; } };
+    await h({ body }, res);
     return out;
   };
-  return { call, calls, cache, getUsed: () => used };
+  const call = mk(handler);
+  const listH = vm.runInContext(extractRoute("app.get('/api/ai/library'"), ctx);
+  const removeH = vm.runInContext(extractRoute("app.post('/api/ai/library/remove'"), ctx);
+  const itemH = vm.runInContext(extractRoute("app.get('/api/ai/library/item'"), ctx);
+  const mkQ = (h) => async (query) => { const out = { status: 200, body: null }; await h({ query }, { status(s) { out.status = s; return this; }, json(b) { out.body = b; return this; }, set() { return this; } }); return out; };
+  return { call, list: mk(listH), remove: mk(removeH), item: mkQ(itemH), calls, cache, library, getUsed: () => used };
 }
 
 test('route: lần đầu hỏi → gọi Gemini 1 lần, trừ 1 lượt, lưu cache, trả giải thích + ví dụ + còn bao nhiêu lượt', async () => {
@@ -133,9 +148,49 @@ test('route: hỏi lại cùng từ (cache trúng) → KHÔNG gọi Gemini, KHÔ
   const r2 = await e.call({ hz: '调查', mode: 'explain' });
   assert.ok(r2.body.ok && r2.body.cached === true); assert.strictEqual(e.calls.gemini, 1); assert.strictEqual(e.calls.takeQuota, 1); assert.strictEqual(e.getUsed(), 1);
 });
-test('route: đáp án nhầm trùng một từ khác → cache riêng theo cặp, prompt có từ đó', async () => {
+test('route: đáp án nhầm trùng một từ khác → lần đầu lưu theo cặp, prompt có từ đó; lần sau nhầm kiểu KHÁC vẫn dùng bản đã có, không gọi AI', async () => {
   const e = makeEnv(); await e.call({ hz: '调查', mode: 'explain', typeId: 'hz2vi', chosen: '检查' });
   assert.ok(e.cache['调查|检查'] && !e.cache['调查|']); assert.ok(e.calls.prompts[0].includes('jiǎnchá'));
+  const r2 = await e.call({ hz: '调查', mode: 'explain', typeId: 'hz2py', chosen: 'diaocha' });
+  assert.ok(r2.body.ok && r2.body.cached === true); assert.strictEqual(e.calls.gemini, 1); assert.strictEqual(e.getUsed(), 1);
+  assert.deepStrictEqual(Object.keys(e.cache), ['调查|检查']);
+});
+test('route: mỗi lần xem giải thích (mới sinh hoặc lấy từ cache) đều được lưu vào thư viện của người đó', async () => {
+  const e = makeEnv(); await e.call({ hz: '调查', mode: 'explain' });
+  assert.deepStrictEqual(e.calls.remembered[0], ['u1', '调查', '调查|']);
+  await e.call({ hz: '调查', mode: 'explain' }); assert.strictEqual(e.calls.remembered.length, 2);
+  const l = await e.list({}); assert.ok(l.body.ok && l.body.items.length === 1 && l.body.items[0].hz === '调查' && l.body.items[0].meaning && !('data' in l.body.items[0]), 'danh sách nhẹ: không kèm phần giải thích đầy đủ');
+  assert.strictEqual(l.body.limit, 20); assert.ok(l.body.remaining <= 20 && l.headers['Cache-Control'] === 'no-store');
+});
+test('route: "Ví dụ khác" cộng dồn vào ĐÚNG bản đang dùng (không tạo bản mới) và cập nhật thư viện', async () => {
+  const more = JSON.stringify({ examples: [{ zh: '他们调查了原因。', py: '', vi: 'Họ điều tra.' }] });
+  const e = makeEnv({ cache: { '调查|检查': GOOD }, geminiOut: more });
+  const r = await e.call({ hz: '调查', mode: 'more', chosen: 'khác' });
+  assert.ok(r.body.ok); assert.deepStrictEqual(Object.keys(e.cache), ['调查|检查']); assert.strictEqual(e.cache['调查|检查'].examples.length, GOOD.examples.length + 1);
+  assert.deepStrictEqual(e.calls.remembered[0], ['u1', '调查', '调查|检查']);
+});
+test('thư viện không giới hạn số từ: 1000 từ vẫn trả đủ và mỗi dòng nhẹ (không kèm ví dụ/mẹo)', async () => {
+  const e = makeEnv(); await e.call({ hz: '调查', mode: 'explain' });
+  for (let i = 0; i < 999; i++) e.library['字' + i] = '调查|';
+  const l = await e.list({}); assert.strictEqual(l.body.items.length, 1000);
+  assert.ok(JSON.stringify(l.body.items[0]).length < 400, 'mỗi dòng nhỏ');
+  const s = read('lib/ai-explain.js'); const sql = s.slice(s.indexOf('async function listLibrary'), s.indexOf('async function getLibraryItem'));
+  assert.ok(!/LIMIT\s+\$2|LIMIT\s+\d+\s*`/.test(sql.replace(/LIMIT 1\)/g, '')), 'không còn LIMIT trên danh sách'); assert.ok(!/LIBRARY_LIMIT/.test(s));
+  assert.ok(/left\(COALESCE\(e\.payload->>'meaning'/.test(sql) && !/e\.payload\s*,/.test(sql.replace(/payload->>'meaning'/g, '')), 'chỉ lấy đoạn đầu phần nghĩa, không lấy cả payload');
+});
+test('route: /api/ai/library/item trả chi tiết đúng từ của mình; thiếu → 404; sai → 400; user thường → 403', async () => {
+  const e = makeEnv(); await e.call({ hz: '调查', mode: 'explain' });
+  const r = await e.item({ hz: '调查' }); assert.ok(r.body.ok && r.body.item.data.examples.length === 2 && r.body.item.data.mnemonic);
+  assert.strictEqual((await e.item({ hz: '不存在' })).status, 404); assert.strictEqual((await e.item({ hz: 'abc' })).status, 400); assert.strictEqual((await e.item({})).status, 400);
+  assert.strictEqual((await makeEnv({ role: 'user' }).item({ hz: '调查' })).status, 403);
+  const s = read('api/index.js'); const b = s.slice(s.indexOf("app.get('/api/ai/library/item'"), s.indexOf("app.get('/api/ai/library/item'") + 700); assert.ok(/getLibraryItem\(authed\.username, hz\)/.test(b), 'chỉ đọc bản của chính người trong token');
+});
+test('route: xoá khỏi thư viện chỉ xoá bản của mình, giữ cache dùng chung; từ không hợp lệ → 400', async () => {
+  const e = makeEnv(); await e.call({ hz: '调查', mode: 'explain' });
+  const r = await e.remove({ hz: '调查' }); assert.ok(r.body.ok && r.body.removed === 1); assert.deepStrictEqual(e.calls.removed[0], ['u1', '调查']);
+  assert.ok(e.cache['调查|'], 'giải thích dùng chung vẫn còn'); assert.strictEqual((await e.list({})).body.items.length, 0);
+  assert.strictEqual((await e.remove({ hz: 'abc' })).status, 400);
+  const again = await e.call({ hz: '调查', mode: 'explain' }); assert.ok(again.body.cached && e.calls.gemini === 1, 'hỏi lại sau khi xoá vẫn không gọi AI');
 });
 test('route: hết lượt trong ngày → 429, không gọi Gemini; cache trúng vẫn xem được dù hết lượt', async () => {
   const e = makeEnv({ used: 20 }); const r = await e.call({ hz: '调查', mode: 'explain' });
@@ -168,6 +223,49 @@ test('route: đầu vào sai → 400/404, không gọi Gemini, không tốn lư�
   assert.strictEqual((await e.call({ hz: '不存在' })).status, 404);
   assert.strictEqual(e.calls.gemini, 0); assert.strictEqual(e.calls.takeQuota, 0);
 });
+test('SQL thư viện: bảng theo (user, từ); danh sách chỉ của đúng user và JOIN bản cache; xoá theo (user, từ); tra cache ưu tiên đúng khoá → bản chung → bản bất kỳ', () => {
+  const l = read('lib/ai-explain.js');
+  assert.ok(/CREATE TABLE IF NOT EXISTS ai_explain_user[\s\S]*PRIMARY KEY \(user_id, hz\)/.test(l));
+  assert.ok(/FROM ai_explain_user u\s+JOIN ai_word_explain e ON e\.cache_key = u\.cache_key[\s\S]*WHERE u\.user_id = \$1/.test(l));
+  assert.ok(/DELETE FROM ai_explain_user WHERE user_id = \$1 AND hz = \$2/.test(l));
+  assert.ok(/ORDER BY \(cache_key = \$2\) DESC, \(cache_key = \$1 \|\| '\|'\) DESC, updated_at DESC/.test(l));
+  const s = read('api/index.js');
+  for (const r of ["app.get('/api/ai/library'", "app.post('/api/ai/library/remove'"]) { const b = s.slice(s.indexOf(r), s.indexOf(r) + 300); assert.ok(/requireAuth\(req, res\)/.test(b), r); }
+  assert.ok(/authed\.username/.test(s.slice(s.indexOf("app.get('/api/ai/library'"), s.indexOf("app.get('/api/ai/library'") + 400)), 'chỉ đọc của đúng người trong token, không nhận userId từ client');
+});
+test('phân quyền: user thường bị chặn 403 ở cả explain, thư viện, xoá — không gọi AI, không đụng quota/DB', async () => {
+  const e = makeEnv({ role: 'user' });
+  const r = await e.call({ hz: '调查', mode: 'explain' });
+  assert.strictEqual(r.status, 403); assert.ok(/quản trị viên/.test(r.body.error));
+  assert.strictEqual((await e.list({})).status, 403); assert.strictEqual((await e.remove({ hz: '调查' })).status, 403);
+  assert.strictEqual(e.calls.gemini, 0); assert.strictEqual(e.calls.takeQuota, 0); assert.strictEqual(e.calls.remembered.length, 0);
+  const cachedUser = makeEnv({ role: 'user', cache: { '调查|': GOOD } }); assert.strictEqual((await cachedUser.call({ hz: '调查', mode: 'explain' })).status, 403, 'kể cả từ đã có cache');
+});
+test('phân quyền: admin dùng được nhưng VẪN bị giới hạn lượt/ngày; hết lượt → 429', async () => {
+  const e = makeEnv({ role: 'admin', used: 19 }); const r = await e.call({ hz: '调查', mode: 'explain' });
+  assert.ok(r.body.ok && r.body.remaining === 0 && r.body.limit === 20 && !r.body.unlimited);
+  const more = await e.call({ hz: '调查', mode: 'more' }); assert.strictEqual(more.status, 429);
+  const l = await e.list({}); assert.strictEqual(l.body.limit, 20);
+});
+test('phân quyền: superadmin KHÔNG giới hạn — không trừ lượt dù đã "hết", không gọi takeQuota, phản hồi unlimited', async () => {
+  const e = makeEnv({ role: 'superadmin', used: 999, geminiOut: (n) => (n === 1 ? JSON.stringify(GOOD) : JSON.stringify({ examples: [{ zh: '他们调查了原因' + n + '。', py: '', vi: 'Họ điều tra ' + n }] })) });
+  for (let i = 0; i < 3; i++) { const r = await e.call({ hz: '调查', mode: i === 0 ? 'explain' : 'more', chosen: 'x' + i }); assert.ok(r.body.ok, JSON.stringify(r.body)); assert.strictEqual(r.body.unlimited, true); assert.strictEqual(r.body.limit, null); assert.strictEqual(r.body.remaining, null); }
+  assert.strictEqual(e.calls.takeQuota, 0); assert.strictEqual(e.getUsed(), 999, 'không đếm lượt'); assert.strictEqual(e.calls.refund, 0);
+  const l = await e.list({}); assert.strictEqual(l.body.unlimited, true);
+});
+test('phân quyền: Gemini lỗi với superadmin → báo lỗi, không hoàn lượt (vì chưa trừ)', async () => {
+  const e = makeEnv({ role: 'superadmin', geminiThrows: 'boom' }); const r = await e.call({ hz: '调查', mode: 'explain' });
+  assert.strictEqual(r.status, 500); assert.strictEqual(e.calls.refund, 0);
+});
+test('phân quyền (UI): user thường không thấy nút Hỏi AI và tab Thư viện AI; admin thấy; superadmin thấy "không giới hạn"', async () => {
+  assert.strictEqual(makeUi({ admin: false, responses: [] }).run("aiExBlockHtml({hz:'调查'},{})"), '');
+  assert.ok(makeUi({ admin: true, responses: [] }).run("aiExBlockHtml({hz:'调查'},{})").includes('Hỏi AI'));
+  const su = makeUi({ responses: [{ ...OKRES, unlimited: true, limit: null, remaining: null }] }); su.run("aiExBlockHtml({hz:'调查'},{})"); await su.run("aiExAsk('调查','explain')");
+  assert.ok(su.box.innerHTML.includes('Không giới hạn') && !/Còn \d/.test(su.box.innerHTML));
+  const nb = makeBank({ admin: false, responses: [] }); assert.ok(nb.run('renderAiBank()').includes('chỉ dành cho quản trị viên')); nb.run('bindAiBank()'); assert.strictEqual(nb.fetches.length, 0);
+  assert.ok(/id="tab-aibank" style="display:none;"/.test(read('index.html')));
+  const a = read('js/auth.js'); assert.ok(/tab-aibank[^\n]*display = 'none'/.test(a) && /tab-aibank[^\n]*display = showAdmin/.test(a));
+});
 test('route: bắt buộc đăng nhập; quota trừ TRƯỚC khi gọi AI (chống bấm dồn); SQL trừ lượt là nguyên tử', () => {
   const s = read('api/index.js'); const i = s.indexOf("app.post('/api/ai/explain'");
   const body = s.slice(i, i + 4200);
@@ -181,7 +279,7 @@ function makeUi(opts = {}) {
   const box = { dataset: { hz: '调查' }, innerHTML: '', scrollIntoView() {} };
   const fetches = [];
   const ctx = {
-    console, isLoggedIn: () => opts.loggedIn !== false, authUsername: 'u1', authHeaders: () => ({ Authorization: 'x' }),
+    console, isLoggedIn: () => opts.loggedIn !== false, isAdminRole: () => opts.admin !== false, authUsername: 'u1', authHeaders: () => ({ Authorization: 'x' }),
     escapeHtml: s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
     escapeJsAttr: s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"),
     document: { getElementById: id => (id === 'ai-ex-box' ? box : null), createElement: () => ({}), head: { appendChild() {} } },
@@ -245,6 +343,85 @@ test('UI: nội dung AI luôn được thoát HTML (chống chèn mã); sang câ
 test('UI: nút nghe ví dụ phát đúng câu', async () => {
   const u = makeUi({ responses: [OKRES] }); u.run("aiExBlockHtml({hz:'调查'},{})"); await u.run("aiExAsk('调查','explain')"); u.run("aiExSpeak('调查',1)");
   assert.strictEqual(u.ctx._spoken, '我们做了一个调查。');
+});
+
+// ───────── tab "🤖 Thư viện AI" ─────────
+function makeBank(opts = {}) {
+  const responses = (opts.responses || []).map(r => (r instanceof Error ? r : JSON.parse(JSON.stringify(r)))); // bản sao: code thư viện sửa trực tiếp các mục, không để lan sang test khác
+  const els = { 'aib-list': { innerHTML: '' }, 'aib-count': { innerHTML: '' } };
+  const fetches = [];
+  const ctx = {
+    console, isLoggedIn: () => opts.loggedIn !== false, isAdminRole: () => opts.admin !== false, authUsername: opts.user || 'u1', authHeaders: () => ({ Authorization: 'x' }),
+    escapeHtml: s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
+    escapeJsAttr: s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"),
+    document: { getElementById: id => els[id] || null }, speak(t) { ctx._spoken = t; }, confirm: () => opts.confirm !== false, alert() {}, aiEx: { '调查': { status: 'ok' } },
+    fetch: async (url, init) => { fetches.push({ url, init }); const o = responses.shift(); if (o instanceof Error) throw o; return { json: async () => o }; },
+  };
+  vm.createContext(ctx);
+  vm.runInContext(read('js/ai-bank.js').replace(/^if \(typeof module[\s\S]*$/m, ''), ctx);
+  return { ctx, els, fetches, run: c => vm.runInContext(c, ctx) };
+}
+const FULL = {
+  '调查': { hz: '调查', py: 'diàochá', vi: 'điều tra', hanviet: 'điều tra', updatedAt: '2026-10-22T03:00:00Z', data: OKRES.data },
+  '检查': { hz: '检查', py: 'jiǎnchá', vi: 'kiểm tra', hanviet: 'kiểm tra', updatedAt: '2026-10-21T03:00:00Z', data: { ...OKRES.data, check: null, meaning: '<b>Xem xét</b> để tìm lỗi.', examples: [{ zh: '检查作业。', py: 'jiǎnchá zuòyè', vi: 'Kiểm tra bài tập.' }] } },
+};
+const ITEMS = Object.values(FULL).map(({ data, ...light }) => ({ ...light, meaning: String(data.meaning).slice(0, 120) })); // danh sách NHẸ như server trả
+const itemRes = hz => ({ ok: true, item: FULL[hz] });
+test('Thư viện: mở tab → chỉ tải danh sách nhẹ (chưa có giải thích); mở từ nào mới tải chi tiết từ đó, một lần; thoát HTML', async () => {
+  const b = makeBank({ responses: [{ ok: true, items: ITEMS }, itemRes('检查')] });
+  const shell = b.run('renderAiBank()'); assert.ok(shell.includes('aib-search') && shell.includes('không tốn lượt AI'));
+  await b.run('aiBankLoad()'); assert.strictEqual(b.fetches.length, 1); assert.strictEqual(b.fetches[0].url, '/api/ai/library');
+  let h = b.els['aib-list'].innerHTML;
+  assert.ok(h.includes('调查') && h.includes('diàochá') && h.includes('检查') && !h.includes('Mẹo nhớ') && !h.includes('警察正在调查这件事。'), 'chưa mở thì chưa có chi tiết');
+  assert.ok(b.els['aib-count'].innerHTML.includes('2 từ'));
+  await b.run("aiBankToggle('检查', true)"); assert.strictEqual(b.fetches.length, 2); assert.ok(b.fetches[1].url.startsWith('/api/ai/library/item?hz=') && decodeURIComponent(b.fetches[1].url).endsWith('检查'));
+  h = b.els['aib-list'].innerHTML; assert.ok(h.includes('检查作业。') && h.includes('&lt;b&gt;Xem xét') && !h.includes('<b>Xem xét</b>'));
+  b.run("aiBankToggle('检查', false)"); b.run("aiBankToggle('检查', true)"); assert.strictEqual(b.fetches.length, 2, 'đã tải rồi thì mở lại không gọi mạng');
+});
+test('Thư viện: chi tiết lỗi → hiện lỗi + "Thử lại", KHÔNG tự gọi lại vòng lặp; thử lại thành công', async () => {
+  const b = makeBank({ responses: [{ ok: true, items: ITEMS }, new Error('Failed to fetch'), itemRes('调查')] }); await b.run('aiBankLoad()');
+  await b.run("aiBankToggle('调查', true)"); assert.ok(b.els['aib-list'].innerHTML.includes('Mất kết nối mạng') && b.els['aib-list'].innerHTML.includes('Thử lại'));
+  b.run("aiBankToggle('调查', true)"); assert.strictEqual(b.fetches.length, 2, 'toggle do vẽ lại không được tự gọi lại');
+  await b.run("aiBankLoadItem('调查')"); assert.ok(b.els['aib-list'].innerHTML.includes('Tìm hiểu kỹ') && b.fetches.length === 3);
+});
+test('Thư viện: tìm kiếm không phân biệt dấu/hoa thường theo chữ Hán, pinyin, nghĩa, đoạn giải thích; không khớp → báo rõ; không gọi mạng', async () => {
+  const b = makeBank({ responses: [{ ok: true, items: ITEMS }] }); await b.run('aiBankLoad()');
+  b.run("aiBankSearch('DIEU TRA')"); assert.ok(b.els['aib-list'].innerHTML.includes('调查') && !b.els['aib-list'].innerHTML.includes('aiBankRemove(\'检查\')'));
+  b.run("aiBankSearch('jianchá')"); assert.ok(b.els['aib-list'].innerHTML.includes("aiBankRemove('检查')"));
+  b.run("aiBankSearch('检')"); assert.ok(b.els['aib-list'].innerHTML.includes("aiBankRemove('检查')"));
+  b.run("aiBankSearch('tim loi')"); assert.ok(b.els['aib-list'].innerHTML.includes("aiBankRemove('检查')"), 'tìm được theo đoạn giải thích');
+  b.run("aiBankSearch('zzz')"); assert.ok(b.els['aib-list'].innerHTML.includes('Không có từ nào khớp'));
+  assert.ok(b.els['aib-count'].innerHTML.includes('0/2')); assert.strictEqual(b.fetches.length, 1);
+});
+test('Thư viện: tải lại danh sách giữ nguyên từ đã mở/đã tải chi tiết; từ vừa lưu xuất hiện', async () => {
+  const more = [{ hz: '报道', py: 'bàodào', vi: 'đưa tin', hanviet: '', meaning: 'x', updatedAt: '2026-10-22T05:00:00Z' }, ...ITEMS];
+  const b = makeBank({ responses: [{ ok: true, items: ITEMS }, itemRes('调查'), { ok: true, items: more }] }); await b.run('aiBankLoad()'); await b.run("aiBankToggle('调查', true)");
+  await b.run('aiBankLoad()'); assert.strictEqual(b.fetches.length, 3); const h = b.els['aib-list'].innerHTML;
+  assert.ok(h.includes('报道') && h.includes('Tìm hiểu kỹ') && /data-hz="调查" open/.test(h));
+});
+test('Thư viện: trống → hướng dẫn cách có giải thích; lỗi mạng → thông báo + Thử lại; khách → yêu cầu đăng nhập', async () => {
+  const e = makeBank({ responses: [{ ok: true, items: [] }] }); await e.run('aiBankLoad()'); assert.ok(e.els['aib-list'].innerHTML.includes('Hỏi AI'));
+  const n = makeBank({ responses: [new Error('Failed to fetch')] }); await n.run('aiBankLoad()'); assert.ok(n.els['aib-list'].innerHTML.includes('Mất kết nối mạng') && n.els['aib-list'].innerHTML.includes('Thử lại'));
+  assert.ok(makeBank({ loggedIn: false, responses: [] }).run('renderAiBank()').includes('Đăng nhập'));
+});
+test('Thư viện: nghe ví dụ (sau khi đã tải chi tiết); xoá (có xác nhận) gọi /remove rồi bỏ khỏi danh sách và xoá trạng thái nhớ ở màn đáp án; huỷ xác nhận → không xoá', async () => {
+  const b = makeBank({ responses: [{ ok: true, items: ITEMS }, itemRes('检查'), { ok: true, removed: 1 }] }); await b.run('aiBankLoad()'); await b.run("aiBankToggle('检查', true)");
+  b.run("aiBankSpeak('检查',0)"); assert.strictEqual(b.ctx._spoken, '检查作业。');
+  await b.run("aiBankRemove('调查')"); assert.strictEqual(b.fetches[2].url, '/api/ai/library/remove'); assert.deepStrictEqual(JSON.parse(b.fetches[2].init.body), { hz: '调查' });
+  assert.ok(!b.els['aib-list'].innerHTML.includes("aiBankRemove('调查')") && b.els['aib-list'].innerHTML.includes("aiBankRemove('检查')")); assert.strictEqual(b.run("typeof aiEx['调查']"), 'undefined');
+  const c = makeBank({ confirm: false, responses: [{ ok: true, items: ITEMS }] }); await c.run('aiBankLoad()'); await c.run("aiBankRemove('调查')"); assert.strictEqual(c.fetches.length, 1);
+});
+test('Thư viện: đổi tài khoản → không lộ dữ liệu người trước; tab có đường vào (Thêm), được dựng bởi render(), nhớ được khi tải lại trang', () => {
+  const b = makeBank({ responses: [{ ok: true, items: ITEMS }] }); b.run('aiBank.items = ' + JSON.stringify(ITEMS) + '; aiBank.status = "ok"; aiBankUser = "u0"');
+  b.run('renderAiBank()'); assert.strictEqual(b.run('aiBank.items.length'), 0);
+  assert.ok(/goTab\('aibank'\)/.test(read('index.html')) && /<script src="\/js\/ai-bank\.js"><\/script>/.test(read('index.html')));
+  assert.ok(/currentTab === 'aibank'[^\n]*renderAiBank\(\)[^\n]*bindAiBank\(\)/.test(read('js/navigation.js')));
+  assert.ok(/'aibank'/.test(read('js/auth.js').match(/validTabs = \[[^\]]*\]/)[0]) && /more: \[[^\]]*'aibank'/.test(read('js/nav.js')));
+  const c = read('css/styles.css'); const a = c.indexOf('V119.1: tab'), w = c.indexOf('V117 — STUDY WORKSPACE'); assert.ok(a > 0 && a < w, 'CSS thư viện nằm trước khối workspace để không vi phạm quy tắc selector của khối đó');
+});
+test('màn đáp án: sau khi có giải thích hiện dòng "Đã lưu vào Thêm → Thư viện AI"', async () => {
+  const u = makeUi({ responses: [OKRES] }); u.run("aiExBlockHtml({hz:'调查'},{})"); await u.run("aiExAsk('调查','explain')");
+  assert.ok(u.box.innerHTML.includes('Thư viện AI') && u.box.innerHTML.includes('không cần gọi AI'));
 });
 
 // ───────── nối vào màn đáp án ─────────
