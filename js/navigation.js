@@ -25,6 +25,7 @@ function render() {
   else if (currentTab === 'skills') { el.innerHTML = renderSkills(); bindSkills(); }
   else if (currentTab === 'difficult'){ el.innerHTML = renderDifficult(); bindDifficult(); }
   else if (currentTab === 'compare'){ el.innerHTML = renderCompare(); bindCompare(); }
+  else if (currentTab === 'aibank') { el.innerHTML = renderAiBank(); bindAiBank(); } // V119.1: Thư viện AI
   else if (currentTab === 'admin') { el.innerHTML = renderAdmin(); bindAdmin(); }
   else if (currentTab === 'vocab') { el.innerHTML = renderVocabAdmin(); bindVocabAdmin(); }
 }

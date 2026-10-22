@@ -12,13 +12,14 @@ let aiExUser = null;
 
 function aiExReset() { aiEx = {}; aiExCtx = {}; aiExQuota = null; }
 function aiExState(hz) { return aiEx[hz] || (aiEx[hz] = { status: 'idle', data: null, error: '', more: false, moreErr: '', open: true, choices: [], picked: null, cached: false }); }
-function aiExEnabled() { return typeof isLoggedIn === 'function' && isLoggedIn(); }
+function aiExEnabled() { return typeof isLoggedIn === 'function' && isLoggedIn() && typeof isAdminRole === 'function' && isAdminRole(); } // V119.2: chỉ quản trị viên
 function aiExEsc(s) { return (typeof escapeHtml === 'function') ? escapeHtml(s) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function aiExJs(s) { return (typeof escapeJsAttr === 'function') ? escapeJsAttr(s) : String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
 function aiExShuffle(arr) { const a = (arr || []).slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 function aiExQuotaLine() {
   if (!aiExQuota) return '';
+  if (aiExQuota.unlimited) return `<div class="ai-ex-quota">♾️ Không giới hạn lượt AI (quản trị cao nhất)</div>`;
   return `<div class="ai-ex-quota">Còn ${aiExQuota.remaining}/${aiExQuota.limit} lượt hỏi AI hôm nay</div>`;
 }
 
@@ -62,7 +63,7 @@ function aiExOkHtml(hz, st) {
     <div class="ai-ex-list">${exs}</div>
     <div class="ai-ex-actions">${moreBtn}</div>
     ${st.moreErr ? `<div class="ai-ex-err">⚠️ ${aiExEsc(st.moreErr)}</div>` : ''}
-    ${aiExCheckHtml(hz, st)}${aiExQuotaLine()}</details>`;
+    ${aiExCheckHtml(hz, st)}<div class="ai-ex-saved">✅ Đã lưu vào <b>Thêm → Thư viện AI</b>: lần sau xem lại không cần gọi AI.</div>${aiExQuotaLine()}</details>`;
 }
 
 function aiExInner(hz) {
@@ -110,7 +111,8 @@ async function aiExAsk(hz, mode) {
       body: JSON.stringify({ hz, mode, typeId: ctx.typeId || '', chosen: ctx.chosen || '' }),
     });
     const d = await res.json().catch(() => null);
-    if (d && typeof d.remaining === 'number') aiExQuota = { remaining: d.remaining, limit: d.limit };
+    if (d && d.unlimited) aiExQuota = { unlimited: true };
+    else if (d && typeof d.remaining === 'number') aiExQuota = { remaining: d.remaining, limit: d.limit };
     if (!d || !d.ok) throw new Error((d && d.error) || 'Không gọi được AI, thử lại sau.');
     if (mode === 'more') {
       const prev = (st.data && st.data.examples) || [];

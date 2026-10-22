@@ -50,7 +50,7 @@ let progressState = defaultProgress();
 function applyUIState() {
   normalizeProgress(progressState);
   const ui = progressState.ui;
-  const validTabs = ['home','today','flash','quiz','type','listen','stats','skills','difficult','compare','admin','vocab'];
+  const validTabs = ['home','today','flash','quiz','type','listen','stats','skills','difficult','compare','aibank','admin','vocab'];
   currentTab = validTabs.includes(ui.lastTab) ? ui.lastTab : 'home';
   selectedBookIds = new Set(ui.selectedBookIds);
   selectedLessons = new Set(ui.selectedLessons);
@@ -230,6 +230,7 @@ function openAuthGate() {
   document.getElementById('auth-error').classList.remove('show');
   document.getElementById('tab-admin').style.display = 'none';
   document.getElementById('tab-vocab').style.display = 'none';
+  const ab = document.getElementById('tab-aibank'); if (ab) ab.style.display = 'none';
 }
 function closeAuthGate() {
   document.getElementById('auth-gate').style.display = 'none';
@@ -237,6 +238,7 @@ function closeAuthGate() {
   const showAdmin = (!isGuest && isAdminRole()) ? '' : 'none';
   document.getElementById('tab-admin').style.display = showAdmin;
   document.getElementById('tab-vocab').style.display = showAdmin;
+  const ab = document.getElementById('tab-aibank'); if (ab) ab.style.display = showAdmin; // V119.2: Thư viện AI chỉ cho quản trị viên
 }
 function updateUserBadge() {
   const badge = document.getElementById('user-badge');
