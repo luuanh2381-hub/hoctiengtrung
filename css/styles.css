@@ -727,3 +727,44 @@ body.sw-on[data-sw-layout="focus"] .rv-card[data-ans="1"] .rv-rating-wrap,body.s
 .rv-card .hp-compact>.hp-card{margin:0 6px 6px;background:var(--card)}
 .rv-card .hp-compact>.hp-card .hp-char{background:var(--paper)}
 .rv-card .hp-compact>.hp-card .hp-chip{background:var(--paper)}
+
+/* ── V119: khối "🤖 Hỏi AI" ở câu sai (selector đều nằm trong .rv-card để không đụng trang khác) ── */
+.rv-card .ai-ex{width:100%;margin:4px 0;scroll-margin-bottom:130px;text-align:left}
+.rv-card .ai-ex-btn{display:block;margin:0 auto;border:2px solid var(--active-dark,#1cb0f6);background:var(--card,#fff);color:var(--active-dark,#1899d6);font-weight:800;font-size:.92rem;border-radius:14px;padding:9px 16px;cursor:pointer;min-height:42px}
+.rv-card .ai-ex-btn:disabled{opacity:.7;cursor:default}
+.rv-card .ai-ex-btn-sm{font-size:.82rem;padding:6px 12px;min-height:34px;display:inline-flex;align-items:center;gap:6px}
+.rv-card .ai-ex-quota{text-align:center;font-size:.72rem;color:var(--muted);margin-top:5px}
+.rv-card .ai-ex-loading{display:flex;align-items:center;justify-content:center;gap:8px;font-size:.85rem;color:var(--muted);padding:10px;border:2px dashed var(--border,#e5e5e5);border-radius:14px}
+.rv-card .ai-ex-spin{width:14px;height:14px;border:2px solid var(--border,#ddd);border-top-color:var(--active-dark,#1cb0f6);border-radius:50%;display:inline-block;animation:ai-ex-rot .8s linear infinite}
+.rv-card .ai-ex-err{font-size:.82rem;color:var(--l10a,#c0392b);background:var(--l10b,#fdecea);border-radius:10px;padding:7px 10px;margin:0 0 6px;text-align:center}
+.rv-card .ai-ex-det{border:2px solid var(--border,#e5e5e5);border-radius:14px;background:var(--paper,#fafafa);padding:0 10px 8px}
+.rv-card .ai-ex-det>summary{cursor:pointer;font-weight:800;font-size:.88rem;padding:9px 0;list-style:none;display:flex;align-items:center;gap:6px}
+.rv-card .ai-ex-det>summary::-webkit-details-marker{display:none}
+.rv-card .ai-ex-det>summary::after{content:"▾";margin-left:auto;color:var(--muted);transition:transform .2s}
+.rv-card .ai-ex-det[open]>summary::after{transform:rotate(180deg)}
+.rv-card .ai-ex-chip{font-size:.66rem;font-weight:800;background:var(--active-bg,#ddf4ff);color:var(--active-dark,#1899d6);border-radius:10px;padding:1px 7px}
+.rv-card .ai-ex-sec{font-size:.86rem;line-height:1.45;margin:3px 0}
+.rv-card .ai-ex-sec b{color:var(--active-dark,#1899d6)}
+.rv-card .ai-ex-mn{background:var(--active-bg,#fff8e1);border-radius:10px;padding:6px 9px}
+.rv-card .ai-ex-list{margin:6px 0 4px}
+.rv-card .ai-ex-item{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px dashed var(--border,#e5e5e5)}
+.rv-card .ai-ex-spk{flex:0 0 auto;border:none;background:var(--card,#fff);border-radius:50%;width:32px;height:32px;font-size:.95rem;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.rv-card .ai-ex-zh{font-size:1.05rem;font-weight:700;line-height:1.35}
+.rv-card .ai-ex-py{font-size:.8rem;color:var(--muted);font-style:italic}
+.rv-card .ai-ex-vi{font-size:.84rem;line-height:1.35}
+.rv-card .ai-ex-actions{text-align:center;margin:4px 0 2px}
+.rv-card .ai-ex-check{margin-top:8px;border-top:2px solid var(--border,#e5e5e5);padding-top:8px}
+.rv-card .ai-ex-q{font-size:.76rem;font-weight:800;color:var(--muted);margin-bottom:4px}
+.rv-card .ai-ex-sentence{font-size:1.1rem;font-weight:700;line-height:1.45}
+.rv-card .ai-ex-blank{display:inline-block;min-width:2.4em;border-bottom:3px solid var(--active-dark,#1cb0f6);text-align:center;color:transparent}
+.rv-card .ai-ex-sub{font-size:.82rem;color:var(--muted);margin-top:2px}
+.rv-card .ai-ex-choices{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.rv-card .ai-ex-choice{flex:1 1 30%;min-height:42px;border:2px solid var(--border,#e5e5e5);background:var(--card,#fff);border-radius:12px;font-size:1.05rem;font-weight:700;cursor:pointer}
+.rv-card .ai-ex-choice.ok{border-color:var(--l8a,#58cc02);background:var(--l8b,#e6f9d0)}
+.rv-card .ai-ex-choice.bad{border-color:var(--l10a,#ff4b4b);background:var(--l10b,#fdecea)}
+.rv-card .ai-ex-result{margin-top:8px;font-size:.88rem;font-weight:700}
+.rv-card .ai-ex-result.ok{color:var(--l8a,#3f9e00)}
+.rv-card .ai-ex-result.bad{color:var(--l10a,#c0392b)}
+.rv-card .ai-ex-full{font-weight:600;color:var(--ink);margin-top:3px;line-height:1.4}
+.rv-card .ai-ex-full span{font-weight:500;color:var(--muted);font-size:.82rem}
+.rv-card .ai-ex-link{border:none;background:none;color:var(--active-dark,#1899d6);font-weight:800;font-size:.82rem;cursor:pointer;padding:4px 0}
