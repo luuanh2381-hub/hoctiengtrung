@@ -2873,29 +2873,40 @@ app.post('/api/ai/explain', async (req, res) => {
   const authed = await requireAuth(req, res);
   if (!authed) return;
   const user = authed.username;
+  const actingUser = authed.db.users[user];
+  if (!requireAdmin(actingUser, res)) return; // V119.2: CHỈ quản trị viên (admin + superadmin) được dùng/gọi AI
+  const unlimited = actingUser.role === 'superadmin'; // V119.2: quản trị cao nhất không bị giới hạn lượt/ngày
   const body = req.body || {};
   if (!aiExplain.isValidHz(body.hz)) return res.status(400).json({ ok: false, error: 'Từ không hợp lệ' });
   const mode = body.mode === 'more' ? 'more' : 'explain';
-  const limit = aiExplain.dailyLimit();
+  const limit = unlimited ? null : aiExplain.dailyLimit();
+  const quotaInfo = (used) => (unlimited ? { used, limit: null, remaining: null, unlimited: true } : { used, limit, remaining: Math.max(0, limit - used) });
   let charged = false;
   try {
     const word = await aiExplain.findWord(body.hz);
     if (!word) return res.status(404).json({ ok: false, error: 'Không tìm thấy từ này trong giáo trình' });
     const chosen = aiExplain.cleanText(body.chosen, aiExplain.MAX_CHOSEN_LEN);
     const confusion = chosen ? await aiExplain.findConfusion(chosen, word.hz) : null;
-    const key = aiExplain.cacheKey(word.hz, confusion && confusion.hz);
-    const cached = await aiExplain.getCached(key);
+    const wantKey = aiExplain.cacheKey(word.hz, confusion && confusion.hz);
+    // V119.1: dùng bất kỳ giải thích ĐÃ CÓ của từ này (ưu tiên đúng cặp từ nhầm) để không gọi AI lại.
+    const row = await aiExplain.getCachedBest(word.hz, wantKey);
+    const cached = row ? row.payload : null;
+    const key = row ? row.cache_key : wantKey; // "Ví dụ khác" cộng dồn vào đúng bản đang dùng
 
     if (mode === 'explain' && cached) {
       const used = await aiExplain.getUsed(user);
-      return res.json({ ok: true, cached: true, data: cached, newExamples: [], used, limit, remaining: Math.max(0, limit - used) });
+      await aiExplain.rememberForUser(user, word.hz, key).catch((e) => console.error('⚠️  Không lưu vào thư viện AI:', e && e.message));
+      return res.json({ ok: true, cached: true, data: cached, newExamples: [], ...quotaInfo(used) });
     }
 
-    const q = await aiExplain.takeQuota(user, limit);
-    if (!q.ok) {
-      return res.status(429).json({ ok: false, error: `Hôm nay bạn đã dùng hết ${limit} lượt hỏi AI. Ngày mai thử lại nhé!`, used: limit, limit, remaining: 0 });
+    let q = { ok: true, used: 0 };
+    if (!unlimited) { // superadmin: bỏ qua đếm lượt hoàn toàn
+      q = await aiExplain.takeQuota(user, limit);
+      if (!q.ok) {
+        return res.status(429).json({ ok: false, error: `Hôm nay bạn đã dùng hết ${limit} lượt hỏi AI. Ngày mai thử lại nhé!`, used: limit, limit, remaining: 0 });
+      }
+      charged = true;
     }
-    charged = true;
     const knownHz = await aiExplain.sampleKnownHz(word.l, 40).catch(() => []);
     let data, newExamples;
     if (mode === 'explain') {
@@ -2915,14 +2926,59 @@ app.post('/api/ai/explain', async (req, res) => {
     }
     // Đưa ví dụ vào kho chung để dùng lại ở câu điền chỗ trống / ví dụ màn đáp án (lỗi ở bước này không làm hỏng kết quả).
     await aiExplain.addToExamplePool(word.hz, word.l, newExamples).catch((e) => console.error('⚠️  Không lưu ví dụ AI vào kho:', e && e.message));
+    if (data) await aiExplain.rememberForUser(user, word.hz, key).catch((e) => console.error('⚠️  Không lưu vào thư viện AI:', e && e.message));
     logActivity(user, authed.db.users[user] && authed.db.users[user].role, 'ai-explain', `${mode === 'more' ? 'Ví dụ khác' : 'Giải thích'}: ${word.hz}`);
-    res.json({ ok: true, cached: false, data, newExamples, used: q.used, limit, remaining: Math.max(0, limit - q.used) });
+    res.json({ ok: true, cached: false, data, newExamples, ...quotaInfo(q.used) });
   } catch (e) {
     if (charged) await aiExplain.refundQuota(user).catch(() => {}); // AI lỗi → không mất lượt của người học
     if (e instanceof PublicError) return fail(res, e);
     if (isQuotaGeminiError(e && e.message)) return fail(res, e, 'AI đang hết lượt trong phút này. Đợi khoảng 1 phút rồi bấm thử lại nhé.');
     fail(res, e, 'Không gọi được AI lúc này. Thử lại sau ít phút nhé.');
   }
+});
+
+// V119.1 — "THƯ VIỆN AI": mọi giải thích AI người học đã xem được lưu theo tài khoản; xem lại KHÔNG gọi AI, KHÔNG tốn lượt.
+app.get('/api/ai/library', async (req, res) => {
+  const authed = await requireAuth(req, res);
+  if (!authed) return;
+  const actingUser = authed.db.users[authed.username];
+  if (!requireAdmin(actingUser, res)) return; // V119.2: chỉ quản trị viên
+  try {
+    const items = await aiExplain.listLibrary(authed.username);
+    res.set('Cache-Control', 'no-store');
+    if (actingUser.role === 'superadmin') return res.json({ ok: true, items, used: 0, limit: null, remaining: null, unlimited: true });
+    const used = await aiExplain.getUsed(authed.username);
+    const limit = aiExplain.dailyLimit();
+    res.json({ ok: true, items, used, limit, remaining: Math.max(0, limit - used) });
+  } catch (e) { fail(res, e); }
+});
+
+// Chi tiết đầy đủ của 1 từ (chỉ tải khi mở từ đó trong tab) — chỉ đọc bản của chính người trong token.
+app.get('/api/ai/library/item', async (req, res) => {
+  const authed = await requireAuth(req, res);
+  if (!authed) return;
+  if (!requireAdmin(authed.db.users[authed.username], res)) return;
+  const hz = req.query && req.query.hz;
+  if (!aiExplain.isValidHz(hz)) return res.status(400).json({ ok: false, error: 'Từ không hợp lệ' });
+  try {
+    const item = await aiExplain.getLibraryItem(authed.username, hz);
+    if (!item) return res.status(404).json({ ok: false, error: 'Từ này không có trong thư viện của bạn' });
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, item });
+  } catch (e) { fail(res, e); }
+});
+
+// Xoá 1 từ khỏi thư viện CỦA MÌNH (bản giải thích dùng chung vẫn giữ để người khác/lần sau dùng lại).
+app.post('/api/ai/library/remove', async (req, res) => {
+  const authed = await requireAuth(req, res);
+  if (!authed) return;
+  if (!requireAdmin(authed.db.users[authed.username], res)) return; // V119.2: chỉ quản trị viên
+  const hz = req.body && req.body.hz;
+  if (!aiExplain.isValidHz(hz)) return res.status(400).json({ ok: false, error: 'Từ không hợp lệ' });
+  try {
+    const removed = await aiExplain.removeFromLibrary(authed.username, hz);
+    res.json({ ok: true, removed });
+  } catch (e) { fail(res, e); }
 });
 
 // ── [ADMIN] Tiến độ sinh ví dụ theo từ — bao nhiêu từ đã đủ ví dụ / tổng số từ ──
