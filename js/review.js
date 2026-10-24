@@ -1051,7 +1051,7 @@ function renderReview() {
   if (revTotal > 0) parts.push(ct('🔁', 'Ôn', `${Math.min(revDone, revTotal)}/${revTotal}`));
   if (!parts.length) parts.push(ct('📋', `Câu ${rvQueue.answeredCount + 1} · còn ${official} thẻ`, null));
   const cur = rvQueue.items[0];
-  if (cur && cur.word && cur.word.l != null) parts.push(ct('📖', 'Bài', escapeHtml(String(cur.word.l)))); // V117: bài của từ đang học
+  if (cur && cur.word && cur.word.l != null) parts.push(ct('📖', '', escapeHtml(lessonName(cur.word.l)))); // V117: bài của từ đang học
   if (rvPhase === 'intro') parts.push(ct('👀', 'xem kỹ từ mới', null));
   else if (practice || rvPhase === 'match') parts.push(ct('📝', 'luyện bổ sung · không tính vào lịch ôn', null));
   const counter = parts.join('');

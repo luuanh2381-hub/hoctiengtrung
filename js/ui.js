@@ -111,8 +111,15 @@ function lessonTagStyle(l) { return `background:${lessonTagBg(l)};color:${lesson
 // lib/fsrs/studyScope.js) luôn có sẵn; `w.l` là fallback cho dữ liệu cũ/nơi chưa gửi `lessons`.
 function lessonsLabel(w) {
   const list = (Array.isArray(w.lessons) && w.lessons.length) ? w.lessons : [w.l];
-  if (list.length <= 6) return `Bài ${list.join(', ')}`;
-  return `Bài ${list.slice(0, 6).join(', ')} +${list.length - 6} bài khác`;
+  const names = list.map(lessonName);
+  if (names.length <= 6) return names.join(', ');
+  return `${names.slice(0, 6).join(', ')} +${names.length - 6} mục khác`;
+}
+// Tên hiển thị của 1 số bài: mục chỉ có đúng 1 bài (HSK 1, HSK 2, Chuyên ngành, Từ nối...) hiện TÊN mục;
+// Quyển nhiều bài (Quyển 1, 2, 3, 4) vẫn hiện "Bài N". Dùng khi đang học để thấy "HSK 1" thay vì "33".
+function lessonName(l) {
+  const b = BOOKS.find(x => l >= x.from && l <= x.to);
+  return (b && b.from === b.to && b.name) ? b.name : 'Bài ' + l;
 }
 
 // Quyển (book) — Quyển 1: bài 1-15, Quyển 2: bài 16-30
