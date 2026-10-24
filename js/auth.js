@@ -50,9 +50,10 @@ let progressState = defaultProgress();
 function applyUIState() {
   normalizeProgress(progressState);
   const ui = progressState.ui;
-  const validTabs = ['home','today','flash','quiz','type','listen','stats','skills','difficult','compare','admin','vocab'];
+  const validTabs = ['home','today','flash','quiz','type','listen','stats','skills','difficult','compare','aibank','admin','vocab'];
   currentTab = validTabs.includes(ui.lastTab) ? ui.lastTab : 'home';
-  selectedBookIds = new Set(ui.selectedBookIds);
+  // Mục "HSK 4+" (id 8) đã bỏ khi khai báo lại HSK 1-5 = bài 33-37 — loại khỏi lựa chọn đã lưu để khỏi lỗi.
+  selectedBookIds = new Set(ui.selectedBookIds.filter(id => id !== 8));
   selectedLessons = new Set(ui.selectedLessons);
   lessonsAllMode = ui.lessonsAllMode;
   showPinyin = ui.showPinyin;
@@ -73,11 +74,7 @@ function applyUIState() {
   const speedVal = document.getElementById('speed-val');
   if (speedVal) speedVal.textContent = ttsRate.toFixed(2);
   applyTheme(ui.theme);
-  const navBtn = document.getElementById('tab-' + currentTab);
-  if (navBtn) {
-    document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
-    navBtn.classList.add('active');
-  }
+  if (typeof navHighlight === 'function') navHighlight(currentTab); // V116 (js/nav.js)
 }
 let authMode = 'login'; // 'login' | 'register'
 let syncTimer = null;
@@ -96,6 +93,28 @@ function authSwitchTab(mode) {
   document.getElementById('auth-tab-register').classList.toggle('active', mode === 'register');
   document.getElementById('auth-submit').textContent = mode === 'login' ? 'Đăng nhập' : 'Đăng ký';
   document.getElementById('auth-error').classList.remove('show');
+}
+
+// V119.3 — Superadmin có thể TẮT trang đăng ký. Màn đăng nhập hỏi server (/api/auth/config) và, nếu đang tắt, ẩn tab "Đăng ký"
+// kèm ghi chú. Lỗi mạng → giữ nguyên (không ẩn nhầm); server vẫn là nơi chặn thật sự.
+let authRegistrationOpen = true;
+function authApplyRegistration(open) {
+  authRegistrationOpen = open !== false;
+  const tab = document.getElementById('auth-tab-register');
+  const note = document.getElementById('auth-note');
+  if (tab) tab.style.display = authRegistrationOpen ? '' : 'none';
+  if (note) {
+    note.textContent = authRegistrationOpen ? '' : 'Trang đăng ký đang tạm đóng. Liên hệ quản trị viên để được cấp tài khoản.';
+    note.classList.toggle('show', !authRegistrationOpen);
+  }
+  if (!authRegistrationOpen && authMode === 'register') authSwitchTab('login');
+}
+async function authLoadConfig() {
+  try {
+    const res = await fetch('/api/auth/config');
+    const d = await res.json();
+    if (d && d.ok) authApplyRegistration(d.registrationOpen);
+  } catch { /* offline: giữ nguyên giao diện */ }
 }
 
 function authShowError(msg) {
@@ -118,7 +137,10 @@ async function authSubmit() {
       body: JSON.stringify({ username, password }),
     });
     const data = await res.json();
-    if (!data.ok) { authShowError(data.error || 'Có lỗi xảy ra'); return; }
+    if (!data.ok) {
+      if (data.registrationClosed) authApplyRegistration(false); // đăng ký vừa bị tắt trong lúc đang mở màn hình
+      authShowError(data.error || 'Có lỗi xảy ra'); return;
+    }
     authToken = data.token; authUsername = data.username; isGuest = false;
     localStorage.setItem('authToken', authToken);
     localStorage.setItem('authUsername', authUsername);
@@ -229,11 +251,13 @@ async function authLogout() {
 
 function openAuthGate() {
   document.getElementById('auth-gate').style.display = 'flex';
+  authLoadConfig(); // V119.3: ẩn/hiện tab Đăng ký theo cài đặt của superadmin
   document.getElementById('auth-username').value = '';
   document.getElementById('auth-password').value = '';
   document.getElementById('auth-error').classList.remove('show');
   document.getElementById('tab-admin').style.display = 'none';
   document.getElementById('tab-vocab').style.display = 'none';
+  const ab = document.getElementById('tab-aibank'); if (ab) ab.style.display = 'none';
 }
 function closeAuthGate() {
   document.getElementById('auth-gate').style.display = 'none';
@@ -241,6 +265,7 @@ function closeAuthGate() {
   const showAdmin = (!isGuest && isAdminRole()) ? '' : 'none';
   document.getElementById('tab-admin').style.display = showAdmin;
   document.getElementById('tab-vocab').style.display = showAdmin;
+  const ab = document.getElementById('tab-aibank'); if (ab) ab.style.display = showAdmin; // V119.2: Thư viện AI chỉ cho quản trị viên
 }
 function updateUserBadge() {
   const badge = document.getElementById('user-badge');

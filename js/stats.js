@@ -10,6 +10,20 @@
 // Biểu đồ tự vẽ bằng SVG/CSS thuần (không thêm thư viện ngoài) — nhẹ, không phá kiến trúc hiện tại.
 let statsRangeDays = 30; // 7 | 30 | 90 | 366 ("Toàn bộ" — giới hạn tối đa backend hỗ trợ cho heatmap)
 
+// V119.4: 2 ô KPI đếm ngày. days = dash.days từ /api/study/dashboard (khách chưa đăng nhập không có → trả [] để không hiện ô trống).
+function statsDayKpis(days) {
+  if (!days) return [];
+  const fmtDate = (k) => (k ? k.split('-').reverse().join('/') : '');
+  const rows = [];
+  const rate = days.studyRatePct != null && days.totalDays ? `${days.studyRatePct}% trong ${days.totalDays} ngày` : '';
+  rows.push(['📅', days.studyDays, 'Số ngày đã học', rate]);
+  if (days.accountDays != null) {
+    const note = days.accountDays === 0 ? 'Tạo hôm nay' : `Tạo ngày ${fmtDate(days.createdDate)}`;
+    rows.push(['🗓️', days.accountDays, 'Ngày từ khi tạo tài khoản', note]);
+  }
+  return rows;
+}
+
 function renderStats() {
   const bookLabel = [...selectedBookIds].map(id => BOOKS.find(b => b.id === id).name).join(', ');
   const levelSelect = levelSelectHtml();
@@ -98,6 +112,7 @@ async function bindStats() {
       ['🎯', pct(fs.retention), 'Retention', ''],
       ['📈', fs.totalReviews ?? 0, 'Tổng lượt ôn', ''],
       ['⏱️', timeStudied, 'Thời gian học', ''],
+      ...statsDayKpis(dash.days), // V119.4: số ngày đã học + số ngày từ khi tạo tài khoản
     ].map(([icon, num, lbl, sub]) => `<div class="dash-kpi">
         <div class="dash-kpi-num">${icon} ${num}</div>
         <div class="dash-kpi-lbl">${lbl}</div>

@@ -385,8 +385,9 @@ async function skSubmitTyped(skip) {
   if (ex) {
     const said = skip ? 'Bạn đã bỏ qua câu này' : 'Bạn đã gõ: ' + escapeHtml(String(value).trim());
     const why = (!skip && AM.VERDICT_TEXT[graded.verdict]) ? ' — ' + escapeHtml(AM.VERDICT_TEXT[graded.verdict]) : '';
+    const toneNote = (!skip && graded.verdict === 'tone_mismatch' && AM.toneFeedback) ? AM.toneFeedback(value, q.correctKey) : ''; // V118
     ex.innerHTML = `<div style="color:${graded.correct ? 'var(--l8a)' : 'var(--l10a)'};font-weight:700">${graded.correct ? '✅ Chính xác' : '❌ Chưa đúng'}</div>`
-      + `<div>${said}${why}</div>` + (graded.correct ? '' : `<div>Đáp án chuẩn: ${escapeHtml(q.correctKey)}</div>`)
+      + `<div>${said}${why}${toneNote ? '<br>' + escapeHtml(toneNote) : ''}</div>` + (graded.correct ? '' : `<div>Đáp án chuẩn: ${escapeHtml(q.correctKey)}</div>`)
       + q.explanation.map(l => `<div>${escapeHtml(l)}</div>`).join('');
   }
   if (graded.correct) playDing(); else playBuzz();

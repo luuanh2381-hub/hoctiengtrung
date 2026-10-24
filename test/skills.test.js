@@ -413,7 +413,10 @@ test('Migration V104 chỉ CỘNG THÊM (không DROP/DELETE/UPDATE ngoài phần
   assert.ok(/user_id TEXT/.test(sql) && /word_id INT/.test(sql) && !/BIGINT/i.test(sql));
 });
 test('Giao diện: tab Phân tích năng lực đăng ký đủ (nút, script, dispatcher, tab hợp lệ)', () => {
-  assert.ok(/goTab\('skills'\)/.test(read('index.html')) && /skills-ui\.js/.test(read('index.html')));
+  // V116: menu gọn — tab 'skills' không còn là 1 nút cứng trong index.html mà là chip "📈 Năng lực" do js/nav.js vẽ (nhóm "Tiến bộ").
+  // Điều kiện kiểm giữ nguyên tinh thần: người dùng VẪN tới được tab, script vẫn nạp, dispatcher vẫn có.
+  const NAVJS = require('../js/nav.js');
+  assert.ok(NAVJS.NAV_GROUPS.progress.includes('skills') && NAVJS.navChipsHtml('stats').includes("goTab('skills')") && /skills-ui\.js/.test(read('index.html')) && /js\/nav\.js/.test(read('index.html')));
   assert.ok(/renderSkills\(\); bindSkills\(\)/.test(read('js/navigation.js')));
   assert.ok(/'skills'/.test(read('js/auth.js')));
 });

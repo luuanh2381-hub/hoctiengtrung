@@ -87,9 +87,7 @@ function goTab(tab) {
   progressState.ui.lastTab = (tab === 'review') ? 'today' : tab;
   cacheProgressLocally();
   scheduleSync();
-  document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
-  const navBtn = document.getElementById('tab-' + tab);
-  if (navBtn) navBtn.classList.add('active');
+  navHighlight(tab); // V116: đánh dấu mục thanh dưới theo NHÓM của tab + vẽ chip phụ (js/nav.js)
   // Hiệu ứng fade/slide nhẹ CHỈ khi thực sự chuyển tab — không áp dụng khi chỉ đổi lựa chọn
   // trong cùng 1 tab (tránh bị "nháy" mỗi lần bấm chọn bài/Quyển).
   const el = document.getElementById('content');
@@ -113,8 +111,15 @@ function lessonTagStyle(l) { return `background:${lessonTagBg(l)};color:${lesson
 // lib/fsrs/studyScope.js) luôn có sẵn; `w.l` là fallback cho dữ liệu cũ/nơi chưa gửi `lessons`.
 function lessonsLabel(w) {
   const list = (Array.isArray(w.lessons) && w.lessons.length) ? w.lessons : [w.l];
-  if (list.length <= 6) return `Bài ${list.join(', ')}`;
-  return `Bài ${list.slice(0, 6).join(', ')} +${list.length - 6} bài khác`;
+  const names = list.map(lessonName);
+  if (names.length <= 6) return names.join(', ');
+  return `${names.slice(0, 6).join(', ')} +${names.length - 6} mục khác`;
+}
+// Tên hiển thị của 1 số bài: mục chỉ có đúng 1 bài (HSK 1, HSK 2, Chuyên ngành, Từ nối...) hiện TÊN mục;
+// Quyển nhiều bài (Quyển 1, 2, 3, 4) vẫn hiện "Bài N". Dùng khi đang học để thấy "HSK 1" thay vì "33".
+function lessonName(l) {
+  const b = BOOKS.find(x => l >= x.from && l <= x.to);
+  return (b && b.from === b.to && b.name) ? b.name : 'Bài ' + l;
 }
 
 // Quyển (book) — Quyển 1: bài 1-15, Quyển 2: bài 16-30
@@ -127,11 +132,10 @@ let BOOKS = [
   {id:14, name:'Từ nối',       from:90, to:90, group:'🧩 Từ vựng mở rộng'},
   {id:15, name:'Lượng từ',     from:91, to:91, group:'🧩 Từ vựng mở rộng'},
   {id:16, name:'Động từ ly hợp', from:120, to:120, group:'🧩 Từ vựng mở rộng'},
-  {id:4,  name:'HSK 1',        from:32, to:32, group:'🎯 Luyện thi HSK'},
-  {id:5,  name:'HSK 2',        from:33, to:33, group:'🎯 Luyện thi HSK'},
-  {id:6,  name:'HSK 3',        from:34, to:34, group:'🎯 Luyện thi HSK'},
-  {id:7,  name:'HSK 4',        from:35, to:35, group:'🎯 Luyện thi HSK'},
-  {id:8,  name:'HSK 4+',       from:36, to:36, group:'🎯 Luyện thi HSK'},
+  {id:4,  name:'HSK 1',        from:33, to:33, group:'🎯 Luyện thi HSK'},
+  {id:5,  name:'HSK 2',        from:34, to:34, group:'🎯 Luyện thi HSK'},
+  {id:6,  name:'HSK 3',        from:35, to:35, group:'🎯 Luyện thi HSK'},
+  {id:7,  name:'HSK 4',        from:36, to:36, group:'🎯 Luyện thi HSK'},
   {id:9,  name:'HSK 5',        from:37, to:37, group:'🎯 Luyện thi HSK'},
   {id:10, name:'HSK 6',        from:38, to:38, group:'🎯 Luyện thi HSK'},
   {id:11, name:'HSK 6+',       from:39, to:39, group:'🎯 Luyện thi HSK'},
@@ -317,7 +321,7 @@ function kbdIsTypingTarget(el) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
 }
 function kbdAnyModalOpen() {
-  return ['auth-gate', 'account-menu', 'danger-confirm-modal', 'pw-modal'].some(id => {
+  return ['auth-gate', 'account-menu', 'danger-confirm-modal', 'pw-modal', 'stroke-overlay', 'display-panel', 'more-sheet', 'sw-panel', 'sw-pause'].some(id => { // V116: thêm cửa sổ nét viết + 2 bảng của menu mới
     const el = document.getElementById(id);
     return el && getComputedStyle(el).display !== 'none';
   });
@@ -347,6 +351,7 @@ document.addEventListener('keydown', (e) => {
     if (isDigit1to4) { e.preventDefault(); kbdPickOption('#ls-area .listen-opt', +key - 1); }
     else if (key.toLowerCase() === 'a') { e.preventDefault(); const b = document.getElementById('ls-play'); if (b) b.click(); }
   } else if (currentTab === 'review') {
+    if (typeof swIsPaused === 'function' && swIsPaused()) return; // V117: đang tạm dừng
     if (rvPhase === 'question' && isDigit1to4) { e.preventDefault(); kbdPickOption('#rv-opts .quiz-opt', +key - 1); }
     else if (rvPhase === 'answered' && (rvRatingPhase === 'pending' || rvRatingPhase === 'loading') && isDigit1to4) {
       e.preventDefault(); rvChooseRating(RV_RATING_ORDER[+key - 1]);

@@ -146,10 +146,13 @@ test('hz chứa dấu nháy không phá thuộc tính onclick', () => {
   const html = api.wnInner("a'b\"c");
   assert.ok(!/onclick="wnOpenEditor\('a'b/.test(html));
 });
-test('Khối ghi chú có mặt ở Review (đáp án + drill) và Flashcard; khách không thấy', () => {
-  assert.strictEqual((reviewSrc.match(/wnBlockHtml\(w\.hz\)/g) || []).length, 3); // màn giới thiệu + đáp án luyện bổ sung + đáp án FSRS
-  assert.ok(/wnBlockHtml\(w\.hz\)/.test(read('js/flashcard.js')));
-  assert.ok(/js\/word-notes\.js/.test(read('index.html')));
+test('V116: mẹo nhớ đã GỠ khỏi giao diện (không nạp script, không gọi ở Review/Flashcard) nhưng file + API + dữ liệu server còn nguyên để khôi phục', () => {
+  assert.strictEqual((reviewSrc.match(/wnBlockHtml|wnOpenEditor|wnNotes/g) || []).length, 0);
+  assert.ok(!/wnBlockHtml|wnOpenEditor/.test(read('js/flashcard.js')));
+  assert.ok(!/js\/word-notes\.js/.test(read('index.html')));
+  assert.ok(fs.existsSync(path.join(ROOT, 'js', 'word-notes.js')), 'file client giữ lại để khôi phục');
+  assert.ok(/require\('\.\.\/lib\/word-notes'\)/.test(read('api/index.js')) && /\/api\/notes/.test(read('api/index.js')), 'API server giữ nguyên');
+  assert.ok(fs.existsSync(path.join(ROOT, 'migrations', 'V105_word_notes.sql')), 'bảng dữ liệu giữ nguyên');
 });
 
 runAll();

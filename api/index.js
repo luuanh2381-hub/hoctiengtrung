@@ -14,7 +14,7 @@ const { readDB, updateDB, updateDBWithFsrsCleanup, getVocabByLessons, getVocabCo
   getVocabWordsByLesson, updateVocabWord, deleteVocabWord,
   removeVocabWordFromLesson, setVocabWordLessons, findVocabWordByHz, // V93 (audit thống nhất từ vựng)
   getAllVocabWords, updateVocabHanviet, getWordExampleCounts, insertWordExamples, getWordExamplesForLessons,
-  getAllHanziParts, getHanziPartsKeys, insertHanziParts,
+  getAllHanziParts, getHanziPartsKeys, insertHanziParts, deleteHanziParts,
   insertActivityLog, getActivityLogs, reserveGeminiSlot, bumpGeminiRateLimit,
   getWeakFsrsCards, getFsrsCardsDebug,
   getWordForAnswerCheck, countKnownFsrsWords, getKnownCountsForUsers, getKnownCountsByLesson,
@@ -26,6 +26,8 @@ const { getFsrsVerificationInfo } = require('../lib/fsrs');
 const reviewService = require('../lib/fsrs/reviewService');
 const skillStore = require('../lib/skill-store');
 const wordNotes = require('../lib/word-notes');
+const aiExplain = require('../lib/ai-explain'); // V119: "🤖 Hỏi AI" ở câu sai
+const studyDays = require('../lib/study-days'); // V119.4: đếm số ngày đã học / số ngày từ khi tạo tài khoản
 const orphans = require('../lib/orphans');
 const { resolveExercise, isCountableAnswer, MEASURABLE_SKILLS, gradeAnswer, PRACTICE_SOURCES, cleanExposure } = require('../lib/skills');
 const skillRecommend = require('../lib/skill-recommend');
@@ -202,6 +204,26 @@ app.post('/api/visit', async (req, res) => {
   } catch (e) { fail(res, e); }
 });
 
+// V119.3 — Đăng ký có thể bị superadmin TẮT. Thiếu cài đặt = mở (giữ nguyên hành vi cũ).
+function isRegistrationOpen(db) { return !(db && db.settings && db.settings.registrationOpen === false); }
+const REGISTRATION_CLOSED_MSG = 'Trang đăng ký đang tạm đóng. Vui lòng liên hệ quản trị viên để được cấp tài khoản.';
+// Kiểm tra tên đăng nhập/mật khẩu — dùng chung cho đăng ký tự do và superadmin tạo tài khoản.
+function validateNewAccount(username, password) {
+  if (!username || !password) return 'Thiếu tên đăng nhập hoặc mật khẩu';
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return 'Tên đăng nhập 3-20 ký tự, chỉ gồm chữ/số/gạch dưới';
+  if (String(password).length < 4) return 'Mật khẩu cần tối thiểu 4 ký tự';
+  return null;
+}
+
+// Trạng thái đăng ký — CÔNG KHAI (màn đăng nhập cần biết có hiện tab "Đăng ký" hay không). Chỉ trả 1 cờ, không lộ gì khác.
+app.get('/api/auth/config', async (req, res) => {
+  try {
+    const db = await readDB();
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, registrationOpen: isRegistrationOpen(db) });
+  } catch (e) { fail(res, e); }
+});
+
 // ── Đăng ký ──
 app.post('/api/register', async (req, res) => {
   // V88 (Phần 7) — chặn tạo hàng loạt tài khoản kịch bản tự động (5 lần/10 phút mỗi IP).
@@ -209,18 +231,19 @@ app.post('/api/register', async (req, res) => {
     return res.status(429).json({ ok: false, error: 'Quá nhiều lần đăng ký. Vui lòng thử lại sau vài phút.' });
   }
   const { username, password } = req.body || {};
-  if (!username || !password) return res.json({ ok: false, error: 'Thiếu tên đăng nhập hoặc mật khẩu' });
-  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-    return res.json({ ok: false, error: 'Tên đăng nhập 3-20 ký tự, chỉ gồm chữ/số/gạch dưới' });
-  }
-  if (String(password).length < 4) return res.json({ ok: false, error: 'Mật khẩu cần tối thiểu 4 ký tự' });
+  const invalid = validateNewAccount(username, password);
+  if (invalid) return res.json({ ok: false, error: invalid });
   try {
     const key = username.toLowerCase();
+    // V119.3: đăng ký đã bị tắt → từ chối SỚM (khỏi tốn bcrypt). Kiểm tra lại lần nữa trong updateDB (đọc mới nhất, có khoá) bên dưới.
+    const pre = await readDB();
+    if (!isRegistrationOpen(pre) && Object.keys(pre.users).length > 0) return res.status(403).json({ ok: false, error: REGISTRATION_CLOSED_MSG, registrationClosed: true });
     const passwordHash = await bcrypt.hash(String(password), 10);
     const token = makeToken();
     const result = await updateDB((db) => {
-      if (db.users[key]) return { ok: false, error: 'Tên đăng nhập đã tồn tại' };
       const isFirstUser = Object.keys(db.users).length === 0;
+      if (!isFirstUser && !isRegistrationOpen(db)) return { ok: false, error: REGISTRATION_CLOSED_MSG, registrationClosed: true };
+      if (db.users[key]) return { ok: false, error: 'Tên đăng nhập đã tồn tại' };
       db.users[key] = {
         username, passwordHash,
         role: isFirstUser ? 'superadmin' : 'user',
@@ -471,15 +494,20 @@ app.get('/api/admin/users', async (req, res) => {
   if (!requireAdmin(db.users[authed.username], res)) return;
   try {
     const keys = Object.keys(db.users);
-    const knownMap = await getKnownCountsForUsers(keys); // 1 query GROUP BY, không N+1 (Phần 13).
+    const [knownMap, daysMap] = await Promise.all([
+      getKnownCountsForUsers(keys), // 1 query GROUP BY, không N+1 (Phần 13).
+      fsrsAnalytics.getStudyDaysForUsers(keys), // V119.4: cũng 1 query GROUP BY cho cả danh sách
+    ]);
     const list = keys.map((key) => {
       const u = db.users[key];
+      const d = studyDays.summarize(daysMap[key], u.createdAt);
       return {
         key,
         username: u.username,
         role: u.role || 'user',
         known: knownMap[key] || 0,
         createdAt: u.createdAt,
+        studyDays: d.studyDays, lastStudyDay: d.lastStudyDay, accountDays: d.accountDays, // V119.4
       };
     }).sort((a, b) => b.createdAt - a.createdAt);
     res.json({ ok: true, users: list });
@@ -538,6 +566,48 @@ app.post('/api/admin/users/:key/reset', async (req, res) => {
       logActivity(authed.username, actingUser.role, 'admin',
         `Reset tiến độ tài khoản "${targetKey}" (fsrs_cards: ${result.fsrsCardsDeleted}, review_history: ${result.reviewHistoryDeleted})`);
     }
+    res.json(result);
+  } catch (e) { fail(res, e); }
+});
+
+// ── [SUPERADMIN] Bật/tắt trang đăng ký (V119.3) ──
+app.post('/api/admin/settings/registration', async (req, res) => {
+  const authed = await requireAuth(req, res);
+  if (!authed) return;
+  if (!requireSuperAdmin(authed.db.users[authed.username], res)) return;
+  const open = req.body && req.body.open;
+  if (typeof open !== 'boolean') return res.status(400).json({ ok: false, error: 'Giá trị không hợp lệ' });
+  try {
+    const result = await updateDB((db) => {
+      if (!db.settings) db.settings = {};
+      db.settings.registrationOpen = open;
+      return { ok: true, registrationOpen: open };
+    });
+    logActivity(authed.username, 'superadmin', 'admin', open ? 'Bật trang đăng ký' : 'Tắt trang đăng ký');
+    res.json(result);
+  } catch (e) { fail(res, e); }
+});
+
+// ── [SUPERADMIN] Tạo tài khoản cho người khác (V119.3) — dùng được cả khi trang đăng ký đang TẮT ──
+// Không đăng nhập hộ và không trả token; chỉ tạo tài khoản rỗng (user hoặc admin). Không tạo được superadmin.
+app.post('/api/admin/users/create', async (req, res) => {
+  const authed = await requireAuth(req, res);
+  if (!authed) return;
+  if (!requireSuperAdmin(authed.db.users[authed.username], res)) return;
+  const { username, password } = req.body || {};
+  const role = (req.body && req.body.role) || 'user';
+  if (role !== 'user' && role !== 'admin') return res.json({ ok: false, error: 'Quyền không hợp lệ' });
+  const invalid = validateNewAccount(username, password);
+  if (invalid) return res.json({ ok: false, error: invalid });
+  try {
+    const key = String(username).toLowerCase();
+    const passwordHash = await bcrypt.hash(String(password), 10);
+    const result = await updateDB((db) => {
+      if (db.users[key]) return { ok: false, error: 'Tên đăng nhập đã tồn tại' };
+      db.users[key] = { username, passwordHash, role, progress: emptyProgress(), createdAt: Date.now() };
+      return { ok: true, user: { key, username, role } };
+    });
+    if (result.ok) logActivity(authed.username, 'superadmin', 'admin', `Tạo tài khoản "${key}" (quyền ${role})`);
     res.json(result);
   } catch (e) { fail(res, e); }
 });
@@ -676,6 +746,7 @@ app.get('/api/study/session', async (req, res) => {
 //     đúng/sai, không tin giá trị answerCorrect nào từ client).
 function correctAnswerForQuizType(word, quizType) {
   if (quizType === 'vi2hz' || quizType === 'py2hz') return word.hz;
+  if (quizType === 'hz2hv') return word.hanviet; // V117: chữ Hán → chọn Hán Việt (luyện bổ sung)
   if (quizType === 'hz2py') return word.py; // V106: chữ Hán → chọn Pinyin (đối chiếu đúng chuỗi pinyin lưu trong DB)
   return word.vi; // mặc định/'hz2vi': nhìn chữ Hán → chọn nghĩa
 }
@@ -1194,11 +1265,13 @@ app.get('/api/study/dashboard', async (req, res) => {
   const authed = await requireAuth(req, res);
   if (!authed) return;
   try {
-    const [summary, streak] = await Promise.all([
+    const [summary, streak, studyInfo] = await Promise.all([
       fsrsAnalytics.getDashboardSummary(authed.username),
       fsrsAnalytics.getStreak(authed.username),
+      fsrsAnalytics.getStudyDays(authed.username),
     ]);
-    res.json({ ok: true, ...summary, streak: streak.currentStreak, longestStreak: streak.longestStreak });
+    const days = studyDays.summarize(studyInfo, authed.db.users[authed.username].createdAt); // V119.4
+    res.json({ ok: true, ...summary, streak: streak.currentStreak, longestStreak: streak.longestStreak, days });
   } catch (e) { fail(res, e); }
 });
 
@@ -2568,6 +2641,7 @@ const WORD_BATCH_SIZE = 12;
 // Logic sinh CHIẾT TỰ BỘ THỦ cho từng chữ Hán đơn lẻ (khác word_examples — đây là phân tích cấu tạo
 // mặt chữ, không phải câu ví dụ). Chữ nào không tách được rõ ràng thì AI chỉ ghi 1 ghi chú ngắn.
 const HANZI_BATCH_SIZE = 20;
+const { normalizeParts, auditParts } = require('../lib/hanzi-parts');
 function extractUniqueChars(words) {
   const set = new Set();
   const cjk = /[\u4e00-\u9fff]/;
@@ -2657,8 +2731,10 @@ async function runHanziPartsGeneration(timeBudgetMs) {
   const TIME_BUDGET_MS = timeBudgetMs || 50000;
   const allWords = await getAllVocabWords();
   const charSet = extractUniqueChars(allWords);
-  const existing = await getHanziPartsKeys();
-  const pending = [...charSet].filter(ch => !existing.has(ch)).sort();
+  // V118.2: "chưa xong" = chưa có dòng HOẶC có dòng nhưng không dùng được (rỗng/sai dạng) — dòng hỏng được xoá để sinh lại.
+  const audit = auditParts(await getAllHanziParts(), charSet);
+  if (audit.invalid.length) await deleteHanziParts(audit.invalid);
+  const pending = [...audit.invalid, ...audit.missing].sort();
   let batches = 0, done = 0, errors = 0;
   const errorSamples = []; // vài lỗi mẫu (không lặp lại thông điệp) để hiện chi tiết cho admin xem
 
@@ -2805,8 +2881,8 @@ app.get('/api/hanzi-parts', async (req, res) => {
   const authed = await requireAuth(req, res);
   if (!authed) return;
   try {
-    const rows = await getAllHanziParts();
-    res.set('Cache-Control', 'private, max-age=120');
+    const rows = (await getAllHanziParts()).map(r => ({ hz: r.hz, parts: normalizeParts(r.parts) })).filter(r => r.parts);
+    res.set('Cache-Control', 'private, no-cache'); // V118.2: bỏ cache 120s — dữ liệu vừa sinh xong phải thấy ngay
     res.json({ ok: true, parts: rows });
   } catch (e) { fail(res, e); }
 });
@@ -2819,9 +2895,9 @@ app.get('/api/admin/hanzi-parts/progress', async (req, res) => {
   try {
     const allWords = await getAllVocabWords();
     const charSet = extractUniqueChars(allWords);
-    const existing = await getHanziPartsKeys();
-    const done = [...charSet].filter(c => existing.has(c)).length;
-    res.json({ ok: true, total: charSet.size, done });
+    const audit = auditParts(await getAllHanziParts(), charSet); // V118.2: chỉ tính dòng DÙNG ĐƯỢC
+    res.json({ ok: true, total: charSet.size, done: audit.done, invalidCount: audit.invalid.length, missingCount: audit.missing.length,
+      invalid: audit.invalid.slice(0, 40), missing: audit.missing.slice(0, 40) });
   } catch (e) { fail(res, e); }
 });
 
@@ -2855,6 +2931,124 @@ app.get('/api/word-examples', async (req, res) => {
     const examples = await getWordExamplesForLessons(lessons);
     res.set('Cache-Control', 'private, max-age=60');
     res.json({ ok: true, examples });
+  } catch (e) { fail(res, e); }
+});
+
+// ════════════════════════════════════════════════════
+// V119 — "🤖 HỎI AI" ở câu SAI (Hôm nay học): AI giải thích từ + sinh thêm ví dụ + câu tự kiểm tra.
+//   mode "explain": giải thích đầy đủ — CACHE theo (từ + từ hay nhầm), cache trúng thì KHÔNG tốn lượt, không gọi Gemini.
+//   mode "more"   : sinh thêm ví dụ khác (luôn gọi AI, tốn 1 lượt) — cộng dồn vào cache và vào kho ví dụ word_examples.
+// Giới hạn AI_EXPLAIN_DAILY_LIMIT lượt/người/ngày (mặc định 20). Lỗi AI → hoàn lại lượt. Chỉ người đã đăng nhập.
+// ════════════════════════════════════════════════════
+app.post('/api/ai/explain', async (req, res) => {
+  const authed = await requireAuth(req, res);
+  if (!authed) return;
+  const user = authed.username;
+  const actingUser = authed.db.users[user];
+  if (!requireAdmin(actingUser, res)) return; // V119.2: CHỈ quản trị viên (admin + superadmin) được dùng/gọi AI
+  const unlimited = actingUser.role === 'superadmin'; // V119.2: quản trị cao nhất không bị giới hạn lượt/ngày
+  const body = req.body || {};
+  if (!aiExplain.isValidHz(body.hz)) return res.status(400).json({ ok: false, error: 'Từ không hợp lệ' });
+  const mode = body.mode === 'more' ? 'more' : 'explain';
+  const limit = unlimited ? null : aiExplain.dailyLimit();
+  const quotaInfo = (used) => (unlimited ? { used, limit: null, remaining: null, unlimited: true } : { used, limit, remaining: Math.max(0, limit - used) });
+  let charged = false;
+  try {
+    const word = await aiExplain.findWord(body.hz);
+    if (!word) return res.status(404).json({ ok: false, error: 'Không tìm thấy từ này trong giáo trình' });
+    const chosen = aiExplain.cleanText(body.chosen, aiExplain.MAX_CHOSEN_LEN);
+    const confusion = chosen ? await aiExplain.findConfusion(chosen, word.hz) : null;
+    const wantKey = aiExplain.cacheKey(word.hz, confusion && confusion.hz);
+    // V119.1: dùng bất kỳ giải thích ĐÃ CÓ của từ này (ưu tiên đúng cặp từ nhầm) để không gọi AI lại.
+    const row = await aiExplain.getCachedBest(word.hz, wantKey);
+    const cached = row ? row.payload : null;
+    const key = row ? row.cache_key : wantKey; // "Ví dụ khác" cộng dồn vào đúng bản đang dùng
+
+    if (mode === 'explain' && cached) {
+      const used = await aiExplain.getUsed(user);
+      await aiExplain.rememberForUser(user, word.hz, key).catch((e) => console.error('⚠️  Không lưu vào thư viện AI:', e && e.message));
+      return res.json({ ok: true, cached: true, data: cached, newExamples: [], ...quotaInfo(used) });
+    }
+
+    let q = { ok: true, used: 0 };
+    if (!unlimited) { // superadmin: bỏ qua đếm lượt hoàn toàn
+      q = await aiExplain.takeQuota(user, limit);
+      if (!q.ok) {
+        return res.status(429).json({ ok: false, error: `Hôm nay bạn đã dùng hết ${limit} lượt hỏi AI. Ngày mai thử lại nhé!`, used: limit, limit, remaining: 0 });
+      }
+      charged = true;
+    }
+    const knownHz = await aiExplain.sampleKnownHz(word.l, 40).catch(() => []);
+    let data, newExamples;
+    if (mode === 'explain') {
+      const text = await callGemini(aiExplain.buildExplainPrompt({ word, typeId: body.typeId, chosen, confusion, knownHz }));
+      const v = aiExplain.validateExplain(aiExplain.parseJsonLoose(text), word, []);
+      if (!v.ok) throw new PublicError(v.error + '. Bấm thử lại nhé.');
+      data = v.data; newExamples = data.examples;
+      await aiExplain.saveCached(key, word.hz, data);
+    } else {
+      const existingZh = cached ? (cached.examples || []).map(e => e.zh) : [];
+      const text = await callGemini(aiExplain.buildMorePrompt({ word, existingZh, knownHz }));
+      const raw = aiExplain.parseJsonLoose(text);
+      newExamples = aiExplain.validateExamples(raw && raw.examples, word.hz, existingZh);
+      if (!newExamples.length) throw new PublicError('AI chưa sinh được ví dụ mới hợp lệ. Bấm thử lại nhé.');
+      data = cached ? aiExplain.mergeExamples(cached, newExamples) : null;
+      if (data) await aiExplain.saveCached(key, word.hz, data);
+    }
+    // Đưa ví dụ vào kho chung để dùng lại ở câu điền chỗ trống / ví dụ màn đáp án (lỗi ở bước này không làm hỏng kết quả).
+    await aiExplain.addToExamplePool(word.hz, word.l, newExamples).catch((e) => console.error('⚠️  Không lưu ví dụ AI vào kho:', e && e.message));
+    if (data) await aiExplain.rememberForUser(user, word.hz, key).catch((e) => console.error('⚠️  Không lưu vào thư viện AI:', e && e.message));
+    logActivity(user, authed.db.users[user] && authed.db.users[user].role, 'ai-explain', `${mode === 'more' ? 'Ví dụ khác' : 'Giải thích'}: ${word.hz}`);
+    res.json({ ok: true, cached: false, data, newExamples, ...quotaInfo(q.used) });
+  } catch (e) {
+    if (charged) await aiExplain.refundQuota(user).catch(() => {}); // AI lỗi → không mất lượt của người học
+    if (e instanceof PublicError) return fail(res, e);
+    if (isQuotaGeminiError(e && e.message)) return fail(res, e, 'AI đang hết lượt trong phút này. Đợi khoảng 1 phút rồi bấm thử lại nhé.');
+    fail(res, e, 'Không gọi được AI lúc này. Thử lại sau ít phút nhé.');
+  }
+});
+
+// V119.1 — "THƯ VIỆN AI": mọi giải thích AI người học đã xem được lưu theo tài khoản; xem lại KHÔNG gọi AI, KHÔNG tốn lượt.
+app.get('/api/ai/library', async (req, res) => {
+  const authed = await requireAuth(req, res);
+  if (!authed) return;
+  const actingUser = authed.db.users[authed.username];
+  if (!requireAdmin(actingUser, res)) return; // V119.2: chỉ quản trị viên
+  try {
+    const items = await aiExplain.listLibrary(authed.username);
+    res.set('Cache-Control', 'no-store');
+    if (actingUser.role === 'superadmin') return res.json({ ok: true, items, used: 0, limit: null, remaining: null, unlimited: true });
+    const used = await aiExplain.getUsed(authed.username);
+    const limit = aiExplain.dailyLimit();
+    res.json({ ok: true, items, used, limit, remaining: Math.max(0, limit - used) });
+  } catch (e) { fail(res, e); }
+});
+
+// Chi tiết đầy đủ của 1 từ (chỉ tải khi mở từ đó trong tab) — chỉ đọc bản của chính người trong token.
+app.get('/api/ai/library/item', async (req, res) => {
+  const authed = await requireAuth(req, res);
+  if (!authed) return;
+  if (!requireAdmin(authed.db.users[authed.username], res)) return;
+  const hz = req.query && req.query.hz;
+  if (!aiExplain.isValidHz(hz)) return res.status(400).json({ ok: false, error: 'Từ không hợp lệ' });
+  try {
+    const item = await aiExplain.getLibraryItem(authed.username, hz);
+    if (!item) return res.status(404).json({ ok: false, error: 'Từ này không có trong thư viện của bạn' });
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, item });
+  } catch (e) { fail(res, e); }
+});
+
+// Xoá 1 từ khỏi thư viện CỦA MÌNH (bản giải thích dùng chung vẫn giữ để người khác/lần sau dùng lại).
+app.post('/api/ai/library/remove', async (req, res) => {
+  const authed = await requireAuth(req, res);
+  if (!authed) return;
+  if (!requireAdmin(authed.db.users[authed.username], res)) return; // V119.2: chỉ quản trị viên
+  const hz = req.body && req.body.hz;
+  if (!aiExplain.isValidHz(hz)) return res.status(400).json({ ok: false, error: 'Từ không hợp lệ' });
+  try {
+    const removed = await aiExplain.removeFromLibrary(authed.username, hz);
+    res.json({ ok: true, removed });
   } catch (e) { fail(res, e); }
 });
 

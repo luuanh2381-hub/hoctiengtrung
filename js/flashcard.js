@@ -97,48 +97,76 @@ async function fcRelearnFromStart() {
 
 // Chiết tự bộ thủ lấy từ database (AI sinh, phủ toàn bộ từ vựng) — tải 1 lần lúc mở app
 let dbHanziParts = {};
-async function loadHanziParts() {
+// V118.1: theo dõi trạng thái tải để KHÔNG báo "đang chờ AI" khi thực ra chỉ là tải chiết tự thất bại/chưa xong.
+// 'idle' → chưa tải; 'loading'; 'ok' → đã nạp từ máy chủ; 'failed' → lỗi mạng/HTTP/phiên hết hạn (sẽ tự thử lại).
+let hanziPartsState = 'idle';
+async function loadHanziParts(attempt) {
+  attempt = attempt || 0;
   if (isGuest || !authToken) return;
+  if (hanziPartsState === 'loading') return;
+  hanziPartsState = 'loading';
   try {
     const res = await fetch('/api/hanzi-parts', { headers: authHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    if (data.ok && Array.isArray(data.parts)) {
-      for (const row of data.parts) dbHanziParts[row.hz] = row.parts;
+    if (!(data && data.ok && Array.isArray(data.parts))) throw new Error('bad payload');
+    for (const row of data.parts) {
+      let pr = row.parts;
+      if (typeof pr === 'string') { try { pr = JSON.parse(pr); } catch { pr = null; } } // V118.2: dòng bị mã hoá JSON 2 lần
+      if (pr) dbHanziParts[row.hz] = pr;
     }
+    hanziPartsState = 'ok';
   } catch {
-    // Không tải được thì dùng tạm từ điển có sẵn trong code (phủ ít hơn), không chặn app
+    // Không tải được thì dùng tạm từ điển có sẵn trong code (phủ ít hơn), không chặn app — và tự thử lại (tối đa 2 lần, 3s/6s).
+    hanziPartsState = 'failed';
+    if (attempt < 2) setTimeout(() => loadHanziParts(attempt + 1), 3000 * (attempt + 1));
   }
 }
 
-function renderHanziParts(hz, expanded) {
+// V118.3 — THIẾT KẾ LẠI chiết tự: mỗi chữ là 1 thẻ (ô chữ lớn + danh sách thành phần, mỗi thành phần 1 dòng "ô bộ thủ · nghĩa").
+// Trước đây khối này bị cố định max-height:82px + cuộn trong (làm cho mặt sau flashcard) nên ở "Hôm nay học" chỉ thấy 1 dải bị cắt.
+// Giờ: không giới hạn chiều cao ở Hôm nay học / Trắc nghiệm; chỉ mặt sau flashcard (chiều cao cố định) mới cuộn, và cuộn cả khối chứ không cắt tiêu đề.
+// Tham số thứ 2 (expanded) giữ lại để tương thích chỗ gọi cũ; không còn ảnh hưởng bố cục.
+// V119: tham số thứ 3 (compact) — dùng ở màn đáp án của Hôm nay học: chỉ hiện 1 dòng tóm tắt "扌tay + 辰 người quỷ · 辶đường + 首đầu"; chạm vào mới xổ ra đủ thẻ chi tiết.
+// Trạng thái mở/đóng nhớ trong hpCompactOpen để người học đã mở thì các thẻ sau vẫn mở.
+let hpCompactOpen = false;
+function hpShort(m) { // rút nghĩa dài thành cụm ngắn cho dòng tóm tắt: bỏ phần sau ( : ; , /
+  let s = String(m == null ? '' : m).split(/[(:;,\/]/)[0].trim();
+  if (!s) s = String(m == null ? '' : m).trim();
+  return s.length > 18 ? s.slice(0, 17).trim() + '…' : s;
+}
+function renderHanziParts(hz, expanded, compact) {
   const cjk = /[\u4e00-\u9fff]/;
-  const chars = [...hz];
-  const rows = chars.map(ch => {
+  const esc = (typeof escapeHtml === 'function') ? escapeHtml : (t => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'));
+  const comp = (c, m) => `<div class="hp-comp"><span class="hp-chip">${esc(c)}</span><span class="hp-mean">${esc(m)}</span></div>`;
+  const card = (ch, body) => `<div class="hp-card"><div class="hp-char">${esc(ch)}</div><div class="hp-body">${body}</div></div>`;
+  const shorts = []; // mỗi chữ: phần tóm tắt 1 dòng (rỗng nếu chưa có dữ liệu)
+  const rows = [...hz].map(ch => {
     // Ưu tiên dữ liệu từ database (AI sinh, phủ rộng hơn), fallback về từ điển nhỏ có sẵn trong code
     const dbEntry = dbHanziParts[ch];
     if (dbEntry) {
-      if (dbEntry.type === 'parts' && Array.isArray(dbEntry.items) && dbEntry.items.length) {
-        const chips = dbEntry.items.map(x => `<span class="fc-parts-chip">${x.c}</span><span class="fc-parts-note">${x.m}</span>`).join(' + ');
-        return `<div class="fc-parts-row"><span class="fc-parts-char">${ch}</span><span class="fc-parts-comps">${chips}</span></div>`;
-      }
-      if (dbEntry.type === 'note' && dbEntry.text) {
-        return `<div class="fc-parts-row"><span class="fc-parts-char">${ch}</span><span class="fc-parts-comps fc-parts-note">${dbEntry.text}</span></div>`;
-      }
+      if (dbEntry.type === 'parts' && Array.isArray(dbEntry.items) && dbEntry.items.length) { shorts.push({ ch, s: dbEntry.items.map(x => `<b>${esc(x.c)}</b>${esc(hpShort(x.m))}`).join(' + ') }); return card(ch, dbEntry.items.map(x => comp(x.c, x.m)).join('')); }
+      if (dbEntry.type === 'note' && dbEntry.text) { shorts.push({ ch, s: esc(hpShort(dbEntry.text)) }); return card(ch, `<div class="hp-note">${esc(dbEntry.text)}</div>`); }
     }
     const entry = HANZI_PARTS[ch];
-    if (entry) {
-      if (Array.isArray(entry)) {
-        const chips = entry.map(([c,m]) => `<span class="fc-parts-chip">${c}</span><span class="fc-parts-note">${m}</span>`).join(' + ');
-        return `<div class="fc-parts-row"><span class="fc-parts-char">${ch}</span><span class="fc-parts-comps">${chips}</span></div>`;
-      }
-      return `<div class="fc-parts-row"><span class="fc-parts-char">${ch}</span><span class="fc-parts-comps fc-parts-note">${entry}</span></div>`;
-    }
-    // Chưa có dữ liệu — chỉ báo "đang chờ" cho chữ Hán thật sự (bỏ qua số/chữ Latin lẫn trong từ)
+    if (entry) { shorts.push({ ch, s: Array.isArray(entry) ? entry.map(([c, m]) => `<b>${esc(c)}</b>${esc(hpShort(m))}`).join(' + ') : esc(hpShort(entry)) }); return card(ch, Array.isArray(entry) ? entry.map(([c, m]) => comp(c, m)).join('') : `<div class="hp-note">${esc(entry)}</div>`); }
+    // Chưa có dữ liệu — chỉ báo cho chữ Hán thật sự (bỏ qua số/chữ Latin lẫn trong từ)
     if (!cjk.test(ch)) return '';
-    return `<div class="fc-parts-row"><span class="fc-parts-char">${ch}</span><span class="fc-parts-comps fc-parts-note" style="opacity:.65">⏳ Đang chờ AI xử lý chữ này</span></div>`;
+    // V118.1: phân biệt 3 tình huống — đang/chưa tải xong, tải lỗi, và máy chủ thật sự chưa có chữ này.
+    if (hanziPartsState !== 'ok' && !isGuest && authToken) {
+      if (hanziPartsState === 'idle' || hanziPartsState === 'failed') loadHanziParts(); // thử lại ngầm, không chặn vẽ
+      shorts.push({ ch, s: '<i>đang tải…</i>' });
+      return card(ch, '<div class="hp-note hp-empty">⏳ Đang tải chiết tự…</div>');
+    }
+    shorts.push({ ch, s: '<i>chưa có</i>' });
+    return card(ch, '<div class="hp-note hp-empty">Chưa có chiết tự cho chữ này</div>');
   }).join('');
   if (!rows) return '';
-  return `<div class="fc-parts-wrap${expanded ? ' qz-parts' : ''}" onclick="event.stopPropagation()"><div class="fc-parts-title">🧩 Bộ thủ / thành phần</div>${rows}</div>`;
+  if (compact) {
+    const sum = shorts.map(x => `<span class="hp-sum-item"><span class="hp-sum-ch">${esc(x.ch)}</span> ${x.s}</span>`).join('<span class="hp-sum-sep">·</span>');
+    return `<details class="hp-wrap hp-compact"${hpCompactOpen ? ' open' : ''} ontoggle="hpCompactOpen=this.open" onclick="event.stopPropagation()"><summary class="hp-sum"><span class="hp-sum-ic">🧩</span><span class="hp-sum-txt">${sum}</span><span class="hp-sum-arrow">▾</span></summary>${rows}</details>`;
+  }
+  return `<div class="hp-wrap" onclick="event.stopPropagation()"><div class="hp-title">🧩 Chiết tự · bộ thủ</div>${rows}</div>`;
 }
 
 function fcUpdate() {
@@ -181,8 +209,7 @@ function fcUpdate() {
     ${showHanViet && w.hanviet ? `<div class="fc-hv">Hán Việt: ${w.hanviet}</div>` : ''}
     ${showMeaning ? `<div class="fc-vi">${w.vi}</div>` : `<button class="btn btn-sm" style="background:var(--l9b);color:var(--l9a);margin-bottom:6px;" onclick="event.stopPropagation();toggleMeaning();fcUpdate();">👁️ Hiện nghĩa</button>`}
     <button class="btn btn-sound btn-sm" onclick="event.stopPropagation();speak('${w.hz}')">🔊 Nghe</button>
-    ${renderHanziParts(w.hz)}
-    <div onclick="event.stopPropagation()">${typeof wnBlockHtml === 'function' ? wnBlockHtml(w.hz) : ''}</div>`;
+    ${renderHanziParts(w.hz)}`;
   document.getElementById('fc-btns').innerHTML = `
     <button class="fc-btn btn-fail" onclick="fcAnswer(false)">❌ Chưa nhớ</button>
     <button class="fc-btn btn-ok" onclick="fcAnswer(true)">✅ Đã nhớ</button>`;

@@ -222,7 +222,7 @@ function makeEnv(over) {
     fetch: async (url, opts) => { calls.fetch.push({ url, body: opts && opts.body ? JSON.parse(opts.body) : null }); return { json: async () => ({ ok: true, systemRating: 'good' }) }; },
   }, over || {});
   vm.createContext(ctx);
-  for (const f of ['js/answer-match.js', 'js/skill-score.js', 'js/question-engine.js', 'js/question-selector.js', 'js/review.js']) vm.runInContext(read(f), ctx);
+  for (const f of ['js/answer-match.js', 'js/skill-score.js', 'js/session-summary.js', 'js/question-engine.js', 'js/question-selector.js', 'js/review.js']) vm.runInContext(read(f), ctx);
   ctx.__calls = calls;
   return ctx;
 }
@@ -340,13 +340,12 @@ test('rvLeechInfo: lapses ≥4 (từ phiên server hoặc thẻ vừa chốt) ho
 test('khối sửa lỗi: từ thường → 1 dòng nhắc; từ cứng đầu → khối 🧲 có nút viết mẹo + xem nét viết, thoát HTML, nói đúng lý do', () => {
   const ctx = makeEnv();
   const normal = R(ctx, "rvCorrectionHtml({ hz: '准备', lapses: 0 }, { correct: false })");
-  assert.ok(normal.includes('hỏi lại sau 2 câu') && !normal.includes('🧲'));
+  assert.ok(normal === '' && !normal.includes('🧲'));
   const leech = R(ctx, "rvCorrectionHtml({ hz: '准备', lapses: 5, hanviet: '<b>x</b>' }, { correct: false })");
-  assert.ok(leech.includes('🧲') && leech.includes("strokeOpen('准备')") && leech.includes("wnOpenEditor('准备')") && leech.includes('đã quên 5 lần') && leech.includes('Viết mẹo nhớ'));
+  // V116: bỏ tính năng mẹo nhớ → khối cứng đầu chỉ còn gợi ý Hán Việt / đọc to / nét viết, KHÔNG còn nút hay lời khuyên viết mẹo
+  assert.ok(leech.includes('🧲') && leech.includes("strokeOpen('准备')") && leech.includes('đã quên 5 lần') && leech.includes('Đọc to từ này'));
+  assert.ok(!/wnOpenEditor|mẹo/i.test(leech), 'không còn nhắc mẹo nhớ');
   assert.ok(!leech.includes('<b>x</b>'), 'Hán Việt từ dữ liệu phải được thoát HTML');
-  R(ctx, "wnNotes = { '准备': 'đã có mẹo' }"); // có mẹo → đổi lời khuyên + nhãn nút
-  const withNote = R(ctx, "rvCorrectionHtml({ hz: '准备', lapses: 5 }, { correct: false })");
-  assert.ok(withNote.includes('Sửa mẹo nhớ') && withNote.includes('Đọc lại mẹo của bạn'));
 });
 test('màn đáp án của thẻ SAI có khối sửa lỗi; thẻ ĐÚNG thì không', () => {
   const ctx = makeEnv(); load(ctx, [item('review', '准备', { word: Object.assign({}, POOL[0], { lapses: 6 }) })]);

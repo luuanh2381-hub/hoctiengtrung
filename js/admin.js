@@ -12,6 +12,7 @@ function renderAdmin() {
   </div>
   <div class="panel">
     <div class="panel-title">🛠️ Quản trị tài khoản${currentRole==='superadmin' ? ' <span style="font-size:.7rem;background:var(--l15c);color:var(--l15a);padding:2px 8px;border-radius:8px;">QUẢN TRỊ CAO NHẤT</span>' : ''}</div>
+    ${currentRole==='superadmin' ? adminRegPanelHtml() : ''}
     <div id="admin-area" style="color:var(--muted);padding:14px 0;text-align:center;">Đang tải danh sách...</div>
   </div>`;
 }
@@ -278,7 +279,8 @@ async function loadHanVietProgress() {
         <span>${data.done} / ${data.total} từ đã có nghĩa Hán Việt</span>
         <span style="color:var(--active-dark)">${pct}%</span>
       </div>
-      <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:var(--active);"></div></div>`;
+      <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:var(--active);"></div></div>
+      ${(data.invalidCount || data.missingCount) ? `<div style="font-size:.8rem;margin-top:8px;color:var(--muted)">${data.missingCount ? `Chưa có: <b>${data.missingCount}</b> chữ (${escapeHtml((data.missing || []).join(' '))}${data.missingCount > (data.missing || []).length ? ' …' : ''}). ` : ''}${data.invalidCount ? `Có dòng nhưng không dùng được: <b>${data.invalidCount}</b> chữ (${escapeHtml((data.invalid || []).join(' '))}${data.invalidCount > (data.invalid || []).length ? ' …' : ''}). ` : ''}Bấm "Chạy sinh chiết tự ngay" để sinh/sinh lại.</div>` : ''}`;
   } catch (e) {
     area.textContent = 'Không kết nối được máy chủ: ' + e.message;
   }
@@ -822,6 +824,7 @@ async function clearAllVocab() {
 }
 async function bindAdmin() {
   if (isGuest || !isAdminRole()) return;
+  if (currentRole === 'superadmin') adminLoadReg(); // V119.3: trạng thái trang đăng ký (không chặn danh sách tài khoản)
   await adminLoadVisits();
   await adminLoadUsers();
 }
@@ -855,6 +858,14 @@ async function adminLoadVisits() {
     area.textContent = 'Không kết nối được máy chủ.';
   }
 }
+// V119.4: dòng "📅 học X ngày · 🗓️ tạo N ngày trước" cho từng tài khoản (số liệu từ /api/admin/users).
+function adminDaysLine(u) {
+  const parts = [];
+  if (Number.isFinite(u.studyDays)) parts.push(`📅 Đã học ${u.studyDays} ngày`);
+  if (Number.isFinite(u.accountDays)) parts.push(u.accountDays === 0 ? '🗓️ Tạo hôm nay' : `🗓️ Tạo ${u.accountDays} ngày trước`);
+  if (u.lastStudyDay) parts.push(`Học gần nhất: ${String(u.lastStudyDay).split('-').reverse().join('/')}`);
+  return parts.join(' · ');
+}
 async function adminLoadUsers() {
   const area = document.getElementById('admin-area');
   if (!area) return;
@@ -880,9 +891,10 @@ async function adminLoadUsers() {
             <b>${u.username}</b>
             ${roleBadge}
           </div>
-          <div style="font-size:.8rem;color:var(--muted);">📚 ${Math.round(u.known/WORDS.length*100)}% (${u.known}/${WORDS.length} từ) · 🔥${u.streak}</div>
+          <div style="font-size:.8rem;color:var(--muted);">📚 ${Math.round(u.known/WORDS.length*100)}% (${u.known}/${WORDS.length} từ)${Number.isFinite(u.streak) ? ' · 🔥' + u.streak : ''}</div>
         </div>
-        <div style="font-size:.72rem;color:var(--muted);margin:4px 0 8px;">Tạo lúc: ${new Date(u.createdAt).toLocaleString('vi-VN')}</div>
+        <div style="font-size:.72rem;color:var(--muted);margin:4px 0 2px;">Tạo lúc: ${new Date(u.createdAt).toLocaleString('vi-VN')}</div>
+        <div style="font-size:.72rem;color:var(--muted);margin:0 0 8px;">${adminDaysLine(u)}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           ${canReset ? `<button class="btn btn-sm" style="background:var(--l9c);color:var(--l9a);" onclick="adminResetUser('${escapeJsAttr(u.key)}','${escapeJsAttr(u.username)}')">🔄 Reset tiến độ</button>` : ''}
           ${canToggleRole ? `<button class="btn btn-sm" style="background:var(--l11c);color:var(--l11a);" onclick="adminToggleRole('${escapeJsAttr(u.key)}','${escapeJsAttr(u.role)}')">${u.role==='admin' ? '⬇️ Bỏ quyền admin' : '⬆️ Cấp quyền admin'}</button>` : ''}
@@ -1007,4 +1019,81 @@ async function dueBreakdown() {
       <table style="width:100%;font-size:.8rem;margin-top:8px;border-collapse:collapse;"><tr><th align="left">Theo bài</th><th align="left">Thẻ đến hạn</th></tr>${lessons}</table>
       <div style="font-size:.75rem;color:var(--muted);margin-top:6px;">Từ thuộc nhiều bài được đếm ở mỗi bài nên tổng theo bài có thể lớn hơn.</div>`;
   } catch (e) { el.textContent = '❌ Không kết nối được máy chủ: ' + e.message; }
+}
+
+// ══════════════════════════════════════════════════════
+// V119.3 — CHỈ SUPERADMIN: bật/tắt trang đăng ký + tạo tài khoản cho người khác
+// ══════════════════════════════════════════════════════
+let adminRegOpen = null; // null = chưa biết
+
+function adminRegPanelHtml() {
+  return `<div class="adm-reg" id="adm-reg">
+    <div class="adm-reg-row">
+      <div>
+        <div class="adm-reg-title">🔐 Trang đăng ký</div>
+        <div class="adm-reg-state" id="adm-reg-state">Đang tải…</div>
+      </div>
+      <button class="btn btn-sm" id="adm-reg-btn" onclick="adminToggleRegistration()" disabled>…</button>
+    </div>
+    <div class="adm-reg-hint">Khi tắt, người lạ không tự đăng ký được (tab "Đăng ký" ở màn đăng nhập bị ẩn). Bạn vẫn tạo tài khoản được ở bên dưới.</div>
+    <details class="adm-create">
+      <summary>➕ Tạo tài khoản mới</summary>
+      <div class="adm-create-body">
+        <input id="adm-new-user" type="text" placeholder="Tên đăng nhập (3-20 ký tự: chữ, số, _)" autocomplete="off" autocapitalize="none">
+        <input id="adm-new-pass" type="text" placeholder="Mật khẩu (tối thiểu 4 ký tự)" autocomplete="off">
+        <select id="adm-new-role"><option value="user">Người học (user)</option><option value="admin">Quản trị viên (admin)</option></select>
+        <button class="btn btn-primary btn-sm" id="adm-create-btn" onclick="adminCreateUser()">Tạo tài khoản</button>
+        <div class="adm-create-msg" id="adm-create-msg"></div>
+      </div>
+    </details>
+  </div>`;
+}
+
+function adminRegRender() {
+  const st = document.getElementById('adm-reg-state'), btn = document.getElementById('adm-reg-btn');
+  if (!st || !btn) return;
+  if (adminRegOpen === null) { st.textContent = 'Không tải được trạng thái'; btn.disabled = true; btn.textContent = 'Thử lại'; btn.onclick = adminLoadReg; return; }
+  btn.onclick = adminToggleRegistration; btn.disabled = false;
+  st.innerHTML = adminRegOpen ? '🟢 <b>Đang MỞ</b> — ai cũng đăng ký được' : '🔴 <b>Đang TẮT</b> — chỉ bạn tạo được tài khoản';
+  btn.textContent = adminRegOpen ? 'Tắt đăng ký' : 'Bật đăng ký';
+}
+
+async function adminLoadReg() {
+  try {
+    const res = await fetch('/api/auth/config');
+    const d = await res.json();
+    adminRegOpen = d && d.ok ? !!d.registrationOpen : null;
+  } catch { adminRegOpen = null; }
+  adminRegRender();
+}
+
+async function adminToggleRegistration() {
+  if (adminRegOpen === null) return adminLoadReg();
+  const next = !adminRegOpen;
+  const msg = next ? 'Bật lại trang đăng ký? Mọi người sẽ tự đăng ký được.' : 'Tắt trang đăng ký? Người mới sẽ không tự tạo được tài khoản (tài khoản đang có không bị ảnh hưởng).';
+  if (!confirm(msg)) return;
+  const btn = document.getElementById('adm-reg-btn'); if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/admin/settings/registration', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ open: next }) });
+    const d = await res.json();
+    if (!d.ok) { alert(d.error || 'Có lỗi xảy ra'); } else { adminRegOpen = !!d.registrationOpen; }
+  } catch { alert('Không kết nối được máy chủ.'); }
+  adminRegRender();
+}
+
+async function adminCreateUser() {
+  const u = document.getElementById('adm-new-user'), p = document.getElementById('adm-new-pass'), r = document.getElementById('adm-new-role');
+  const msg = document.getElementById('adm-create-msg'), btn = document.getElementById('adm-create-btn');
+  if (!u || !p || !r || !msg) return;
+  const show = (t, ok) => { msg.textContent = t; msg.className = 'adm-create-msg ' + (ok ? 'ok' : 'err'); };
+  const username = u.value.trim(), password = p.value;
+  if (!username || !password) return show('Nhập đủ tên đăng nhập và mật khẩu', false);
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/admin/users/create', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ username, password, role: r.value }) });
+    const d = await res.json();
+    if (!d.ok) { show(d.error || 'Có lỗi xảy ra', false); }
+    else { show(`✅ Đã tạo "${d.user.username}" (${d.user.role}). Hãy gửi mật khẩu cho người đó.`, true); u.value = ''; p.value = ''; adminLoadUsers(); }
+  } catch { show('Không kết nối được máy chủ.', false); }
+  btn.disabled = false;
 }

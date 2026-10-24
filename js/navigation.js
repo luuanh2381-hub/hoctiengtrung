@@ -3,13 +3,15 @@
 // RENDER DISPATCHER
 // ════════════════════════════════════════════════════
 function render() {
-  document.getElementById('streak-badge').textContent = '🔥 ' + getStreak() + ' ngày';
+  document.getElementById('streak-badge').textContent = '🔥 ' + getStreak(); // V116: bỏ chữ "ngày" cho header gọn (có tooltip "Số ngày học liên tiếp")
+  if (typeof navSyncUI === 'function') navSyncUI(); // V116: chấm "đang ẩn Pinyin/nghĩa/Hán Việt" trên nút ⚙️
   // Task 4/5 (V70 Pha B): tab nào tính là "đang học thật" thì giữ phiên study_sessions sống +
   // chạy đồng hồ realtime; rời sang tab khác (Trang chủ, Thống kê, ...) thì dừng đếm/heartbeat lại
   // (phiên vẫn còn hiệu lực phía server trong 15 phút — quay lại sẽ nối tiếp, không tạo phiên mới).
   // V112: đồng bộ "vắng mặt" của câu hỏi đang treo (đổi tab trong app = vắng mặt) và giờ học THỰC (isStudyContext gồm cả buổi
   // luyện kỹ năng bổ sung). Rời màn học → báo nốt số giây học thực chưa gửi rồi dừng.
   vtSync();
+  if (typeof swSync === 'function') swSync(); // V117: bật/tắt class `sw-on` + thanh điều khiển khu vực học (chỉ ở tab 'review')
   if (isStudyContext()) ensureStudySession(); else leaveStudyContext();
   const el = document.getElementById('content');
   if (currentTab === 'home')   { el.innerHTML = renderHome(); bindHome(); }
@@ -23,6 +25,7 @@ function render() {
   else if (currentTab === 'skills') { el.innerHTML = renderSkills(); bindSkills(); }
   else if (currentTab === 'difficult'){ el.innerHTML = renderDifficult(); bindDifficult(); }
   else if (currentTab === 'compare'){ el.innerHTML = renderCompare(); bindCompare(); }
+  else if (currentTab === 'aibank') { el.innerHTML = renderAiBank(); bindAiBank(); } // V119.1: Thư viện AI
   else if (currentTab === 'admin') { el.innerHTML = renderAdmin(); bindAdmin(); }
   else if (currentTab === 'vocab') { el.innerHTML = renderVocabAdmin(); bindVocabAdmin(); }
 }

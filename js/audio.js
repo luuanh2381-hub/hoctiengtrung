@@ -52,41 +52,39 @@ function splitPhrases(text) {
 }
 
 // Speak with natural phrasing: queue utterances with micro-pauses between chunks
-function speak(text) {
-  if (!('speechSynthesis' in window)) return;
+function speak(text, hooks) {
+  // V117: `hooks` (tuỳ chọn) = { start, end, error } — để màn nghe báo "đang phát / đã nghe / bị chặn". Không đổi cách phát cũ.
+  if (!('speechSynthesis' in window)) { if (hooks && hooks.error) hooks.error(); return; }
   speechSynthesis.cancel();
 
   const phrases = splitPhrases(text);
+  const mk = (t, quiet) => {
+    const utt = new SpeechSynthesisUtterance(t);
+    utt.lang = 'zh-CN';
+    utt.rate = ttsRate;
+    if (quiet) utt.volume = 0; else utt.pitch = 1.05;
+    if (ttsVoice) utt.voice = ttsVoice;
+    return utt;
+  };
 
   // If single short word, just speak directly
   if (phrases.length <= 1) {
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.lang = 'zh-CN';
-    utt.rate = ttsRate;
-    utt.pitch = 1.05;
-    if (ttsVoice) utt.voice = ttsVoice;
+    const utt = mk(text, false);
+    if (hooks) { utt.onstart = () => hooks.start && hooks.start(); utt.onend = () => hooks.end && hooks.end(); utt.onerror = () => hooks.error && hooks.error(); }
     speechSynthesis.speak(utt);
     return;
   }
 
   // Queue each phrase; insert a tiny silent utterance as pause between phrases
   phrases.forEach((phrase, i) => {
-    const utt = new SpeechSynthesisUtterance(phrase);
-    utt.lang = 'zh-CN';
-    utt.rate = ttsRate;
-    utt.pitch = 1.05;
-    if (ttsVoice) utt.voice = ttsVoice;
+    const utt = mk(phrase, false);
+    if (hooks && i === 0) utt.onstart = () => hooks.start && hooks.start();
+    if (hooks && i === phrases.length - 1) { utt.onend = () => hooks.end && hooks.end(); }
+    if (hooks) utt.onerror = () => hooks.error && hooks.error();
     speechSynthesis.speak(utt);
 
     // Insert micro-pause after each phrase except last
-    if (i < phrases.length - 1) {
-      const pause = new SpeechSynthesisUtterance(' ');
-      pause.lang = 'zh-CN';
-      pause.rate = ttsRate;
-      pause.volume = 0;
-      if (ttsVoice) pause.voice = ttsVoice;
-      speechSynthesis.speak(pause);
-    }
+    if (i < phrases.length - 1) speechSynthesis.speak(mk(' ', true));
   });
 }
 

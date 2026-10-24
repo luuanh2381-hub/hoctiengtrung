@@ -145,6 +145,58 @@ const AM = (function () {
     return { verdict: best, correct: false };
   }
 
+  // ── V118: PHẢN HỒI THANH ĐIỆU CỤ THỂ ────────────────────────────────────────────────────────
+  // Chỉ để GIẢI THÍCH (không đổi cách chấm): khi verdict = 'tone_mismatch', chỉ ra âm tiết nào sai thanh, bạn gõ thanh mấy,
+  // đáp án là thanh mấy. Tách âm tiết theo cụm nguyên âm (mỗi âm tiết pinyin có đúng 1 cụm nguyên âm); phụ âm nằm giữa hai cụm
+  // được chia theo quy tắc: 'ng' thuộc âm tiết trước; 'n'/'r' đứng trước phụ âm khác thuộc âm tiết trước; còn lại thuộc âm tiết sau.
+  // Chuỗi âm tiết chỉ dùng để HIỂN THỊ — việc phát hiện khác thanh dựa trên chỉ số ký tự nên không phụ thuộc cách tách này.
+  function syllableBounds(letters) {
+    const runs = [];
+    for (let i = 0; i < letters.length;) {
+      if (VOWELS.includes(letters[i])) { let j = i; while (j < letters.length && VOWELS.includes(letters[j])) j++; runs.push([i, j]); i = j; } else i++;
+    }
+    if (!runs.length) return [];
+    const cuts = [0];
+    for (let k = 1; k < runs.length; k++) {
+      const c = letters.slice(runs[k - 1][1], runs[k][0]);
+      let cut = runs[k - 1][1];                                   // mặc định: toàn bộ cụm phụ âm thuộc âm tiết sau
+      if (c.startsWith('ng')) cut += 2;                           // ng luôn là âm cuối (tiếng Hán không có thanh mẫu ng)
+      else if (c.length >= 2 && (c[0] === 'n' || c[0] === 'r')) cut += 1;
+      cuts.push(cut);
+    }
+    cuts.push(letters.length);
+    return runs.map((_, k) => ({ start: cuts[k], end: cuts[k + 1] }));
+  }
+  function toneInRange(tones, start, end) {
+    for (const k of Object.keys(tones)) { const i = Number(k); if (i >= start && i < end) return tones[k]; }
+    return 0; // 0 = không có thanh (thanh nhẹ / không gõ)
+  }
+  // Trả mảng [{ n, syllable, got, want }] cho các âm tiết khác thanh (n tính từ 1); null nếu không có phương án nào cùng chữ cái.
+  function toneDiff(input, expected) {
+    const given = parsePinyin(input);
+    if (!given) return null;
+    let best = null;
+    for (const alt of splitAlternatives(expected)) {
+      const want = parsePinyin(alt);
+      if (!want || want.letters !== given.letters || sameTones(want.tones, given.tones)) continue;
+      const diffs = [];
+      syllableBounds(want.letters).forEach((b, k) => {
+        const w = toneInRange(want.tones, b.start, b.end), g = toneInRange(given.tones, b.start, b.end);
+        if (w !== g) diffs.push({ n: k + 1, syllable: want.letters.slice(b.start, b.end), got: g, want: w });
+      });
+      if (diffs.length && (!best || diffs.length < best.length)) best = diffs;
+    }
+    return best;
+  }
+  const toneName = (t) => t ? 'thanh ' + t : 'không có thanh (thanh nhẹ)';
+  // Câu giải thích ngắn bằng tiếng Việt, '' nếu không có gì cụ thể để nói.
+  function toneFeedback(input, expected) {
+    const d = toneDiff(input, expected);
+    if (!d || !d.length) return '';
+    const multi = syllableBounds((parsePinyin(expected.split(/[\/;；|、,，]/)[0]) || { letters: '' }).letters).length > 1;
+    return d.map(x => `${multi ? `Âm tiết ${x.n} (${x.syllable}): ` : ''}bạn gõ ${toneName(x.got)}, đáp án là ${toneName(x.want)}.`).join(' ');
+  }
+
   // Giao diện thống nhất cho server: kind = 'hz' | 'py'.
   function grade(kind, input, expected, opts) {
     return kind === 'py' ? matchPinyin(input, expected, opts) : matchHanzi(input, expected);
@@ -158,7 +210,7 @@ const AM = (function () {
     empty: 'Chưa nhập đáp án',
   };
 
-  return { normalizeHanzi, matchHanzi, parsePinyin, matchPinyin, grade, splitAlternatives, VERDICT_TEXT };
+  return { normalizeHanzi, matchHanzi, parsePinyin, matchPinyin, grade, splitAlternatives, VERDICT_TEXT, toneDiff, toneFeedback };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = AM;
