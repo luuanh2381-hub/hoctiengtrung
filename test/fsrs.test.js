@@ -217,6 +217,8 @@ test('bookOfLessonServer(): map đúng bài → Quyển theo BOOKS_RANGES', () =
   assert.strictEqual(studyScope.bookOfLessonServer(10), 1); // Quyển 1: 1-15
   assert.strictEqual(studyScope.bookOfLessonServer(20), 2); // Quyển 2: 16-30
   assert.strictEqual(studyScope.bookOfLessonServer(9999), 1); // không khớp Quyển nào -> fallback 1
+  // HSK 1-5 = bài 33-37 (id 4,5,6,7,9)
+  assert.deepStrictEqual([33, 34, 35, 36, 37].map(studyScope.bookOfLessonServer), [4, 5, 6, 7, 9]);
 });
 
 console.log('\n════════════════════════════════════════════════════');
